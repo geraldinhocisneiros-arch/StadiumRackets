@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Nome do Worker no Cloudflare — o sistema fica em
+  // https://stadium-rackets.<sua-conta>.workers.dev (ou no domínio próprio
+  // configurado em Workers & Pages → stadium-rackets → Settings → Domains).
+  "name": "stadium-rackets",
+  "compatibility_date": "2025-09-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "@tanstack/react-start/server-entry",
+  // Variáveis e segredos do servidor (SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY,
+  // SUPABASE_SERVICE_ROLE_KEY e os opcionais NEUROCHAT_*, MERCADOPAGO_*) são
+  // enviados pelo GitHub Actions com `wrangler secret` a cada deploy — ver
+  // .github/workflows/deploy.yml. Não coloque chaves aqui.
+}
