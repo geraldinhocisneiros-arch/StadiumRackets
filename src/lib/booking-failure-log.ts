@@ -1,5 +1,5 @@
 // Registra no banco uma tentativa de reserva recusada no portal, para a
-// secretaria consultar em /reservas-recusadas quando o cliente reclamar.
+// secretaria consultar na tabela portal_booking_failures quando o cliente reclamar.
 // Ver supabase/migrations/20260925100000_portal_booking_failures.sql.
 //
 // Nunca lança erro nem é aguardado por quem chama: se o próprio registro

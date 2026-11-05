@@ -14,8 +14,6 @@ import { Route as CaixaRouteImport } from './routes/caixa'
 import { Route as CategoriasRouteImport } from './routes/categorias'
 import { Route as ClienteRouteImport } from './routes/cliente'
 import { Route as ClientesRouteImport } from './routes/clientes'
-import { Route as CobrancaFollowupsRouteImport } from './routes/cobranca-followups'
-import { Route as ComissoesRouteImport } from './routes/comissoes'
 import { Route as EsperaRouteImport } from './routes/espera'
 import { Route as EstoqueRouteImport } from './routes/estoque'
 import { Route as FatQuadraRouteImport } from './routes/fat-quadra'
@@ -24,7 +22,6 @@ import { Route as FinancasRouteImport } from './routes/financas'
 import { Route as GestaoRouteImport } from './routes/gestao'
 import { Route as InadimplentesRouteImport } from './routes/inadimplentes'
 import { Route as InteligenciaRouteImport } from './routes/inteligencia'
-import { Route as LiberacaoQuadrasRouteImport } from './routes/liberacao-quadras'
 import { Route as LimpezaRouteImport } from './routes/limpeza'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MapaRouteImport } from './routes/mapa'
@@ -35,7 +32,6 @@ import { Route as ProfessoresRouteImport } from './routes/professores'
 import { Route as RecepcaoRouteImport } from './routes/recepcao'
 import { Route as RelatorioCobrancaRouteImport } from './routes/relatorio-cobranca'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
-import { Route as ReservasRecusadasRouteImport } from './routes/reservas-recusadas'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as TarefasRouteImport } from './routes/tarefas'
@@ -87,16 +83,6 @@ const ClientesRoute = ClientesRouteImport.update({
   path: '/clientes',
   getParentRoute: () => rootRouteImport,
 } as any)
-const CobrancaFollowupsRoute = CobrancaFollowupsRouteImport.update({
-  id: '/cobranca-followups',
-  path: '/cobranca-followups',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ComissoesRoute = ComissoesRouteImport.update({
-  id: '/comissoes',
-  path: '/comissoes',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const EsperaRoute = EsperaRouteImport.update({
   id: '/espera',
   path: '/espera',
@@ -135,11 +121,6 @@ const InadimplentesRoute = InadimplentesRouteImport.update({
 const InteligenciaRoute = InteligenciaRouteImport.update({
   id: '/inteligencia',
   path: '/inteligencia',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LiberacaoQuadrasRoute = LiberacaoQuadrasRouteImport.update({
-  id: '/liberacao-quadras',
-  path: '/liberacao-quadras',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LimpezaRoute = LimpezaRouteImport.update({
@@ -190,11 +171,6 @@ const RelatorioCobrancaRoute = RelatorioCobrancaRouteImport.update({
 const RelatoriosRoute = RelatoriosRouteImport.update({
   id: '/relatorios',
   path: '/relatorios',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ReservasRecusadasRoute = ReservasRecusadasRouteImport.update({
-  id: '/reservas-recusadas',
-  path: '/reservas-recusadas',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -331,8 +307,6 @@ export interface FileRoutesByFullPath {
   '/categorias': typeof CategoriasRoute
   '/cliente': typeof ClienteRoute
   '/clientes': typeof ClientesRouteWithChildren
-  '/cobranca-followups': typeof CobrancaFollowupsRoute
-  '/comissoes': typeof ComissoesRoute
   '/espera': typeof EsperaRoute
   '/estoque': typeof EstoqueRoute
   '/fat-quadra': typeof FatQuadraRoute
@@ -341,7 +315,6 @@ export interface FileRoutesByFullPath {
   '/gestao': typeof GestaoRoute
   '/inadimplentes': typeof InadimplentesRoute
   '/inteligencia': typeof InteligenciaRoute
-  '/liberacao-quadras': typeof LiberacaoQuadrasRoute
   '/limpeza': typeof LimpezaRoute
   '/login': typeof LoginRoute
   '/mapa': typeof MapaRouteWithChildren
@@ -352,7 +325,6 @@ export interface FileRoutesByFullPath {
   '/recepcao': typeof RecepcaoRoute
   '/relatorio-cobranca': typeof RelatorioCobrancaRoute
   '/relatorios': typeof RelatoriosRoute
-  '/reservas-recusadas': typeof ReservasRecusadasRoute
   '/reset-password': typeof ResetPasswordRoute
   '/setup': typeof SetupRoute
   '/tarefas': typeof TarefasRoute
@@ -385,8 +357,6 @@ export interface FileRoutesByTo {
   '/categorias': typeof CategoriasRoute
   '/cliente': typeof ClienteRoute
   '/clientes': typeof ClientesRouteWithChildren
-  '/cobranca-followups': typeof CobrancaFollowupsRoute
-  '/comissoes': typeof ComissoesRoute
   '/espera': typeof EsperaRoute
   '/estoque': typeof EstoqueRoute
   '/fat-quadra': typeof FatQuadraRoute
@@ -395,7 +365,6 @@ export interface FileRoutesByTo {
   '/gestao': typeof GestaoRoute
   '/inadimplentes': typeof InadimplentesRoute
   '/inteligencia': typeof InteligenciaRoute
-  '/liberacao-quadras': typeof LiberacaoQuadrasRoute
   '/limpeza': typeof LimpezaRoute
   '/login': typeof LoginRoute
   '/mapa': typeof MapaRouteWithChildren
@@ -405,7 +374,6 @@ export interface FileRoutesByTo {
   '/recepcao': typeof RecepcaoRoute
   '/relatorio-cobranca': typeof RelatorioCobrancaRoute
   '/relatorios': typeof RelatoriosRoute
-  '/reservas-recusadas': typeof ReservasRecusadasRoute
   '/reset-password': typeof ResetPasswordRoute
   '/setup': typeof SetupRoute
   '/tarefas': typeof TarefasRoute
@@ -439,8 +407,6 @@ export interface FileRoutesById {
   '/categorias': typeof CategoriasRoute
   '/cliente': typeof ClienteRoute
   '/clientes': typeof ClientesRouteWithChildren
-  '/cobranca-followups': typeof CobrancaFollowupsRoute
-  '/comissoes': typeof ComissoesRoute
   '/espera': typeof EsperaRoute
   '/estoque': typeof EstoqueRoute
   '/fat-quadra': typeof FatQuadraRoute
@@ -449,7 +415,6 @@ export interface FileRoutesById {
   '/gestao': typeof GestaoRoute
   '/inadimplentes': typeof InadimplentesRoute
   '/inteligencia': typeof InteligenciaRoute
-  '/liberacao-quadras': typeof LiberacaoQuadrasRoute
   '/limpeza': typeof LimpezaRoute
   '/login': typeof LoginRoute
   '/mapa': typeof MapaRouteWithChildren
@@ -460,7 +425,6 @@ export interface FileRoutesById {
   '/recepcao': typeof RecepcaoRoute
   '/relatorio-cobranca': typeof RelatorioCobrancaRoute
   '/relatorios': typeof RelatoriosRoute
-  '/reservas-recusadas': typeof ReservasRecusadasRoute
   '/reset-password': typeof ResetPasswordRoute
   '/setup': typeof SetupRoute
   '/tarefas': typeof TarefasRoute
@@ -495,8 +459,6 @@ export interface FileRouteTypes {
     | '/categorias'
     | '/cliente'
     | '/clientes'
-    | '/cobranca-followups'
-    | '/comissoes'
     | '/espera'
     | '/estoque'
     | '/fat-quadra'
@@ -505,7 +467,6 @@ export interface FileRouteTypes {
     | '/gestao'
     | '/inadimplentes'
     | '/inteligencia'
-    | '/liberacao-quadras'
     | '/limpeza'
     | '/login'
     | '/mapa'
@@ -516,7 +477,6 @@ export interface FileRouteTypes {
     | '/recepcao'
     | '/relatorio-cobranca'
     | '/relatorios'
-    | '/reservas-recusadas'
     | '/reset-password'
     | '/setup'
     | '/tarefas'
@@ -549,8 +509,6 @@ export interface FileRouteTypes {
     | '/categorias'
     | '/cliente'
     | '/clientes'
-    | '/cobranca-followups'
-    | '/comissoes'
     | '/espera'
     | '/estoque'
     | '/fat-quadra'
@@ -559,7 +517,6 @@ export interface FileRouteTypes {
     | '/gestao'
     | '/inadimplentes'
     | '/inteligencia'
-    | '/liberacao-quadras'
     | '/limpeza'
     | '/login'
     | '/mapa'
@@ -569,7 +526,6 @@ export interface FileRouteTypes {
     | '/recepcao'
     | '/relatorio-cobranca'
     | '/relatorios'
-    | '/reservas-recusadas'
     | '/reset-password'
     | '/setup'
     | '/tarefas'
@@ -602,8 +558,6 @@ export interface FileRouteTypes {
     | '/categorias'
     | '/cliente'
     | '/clientes'
-    | '/cobranca-followups'
-    | '/comissoes'
     | '/espera'
     | '/estoque'
     | '/fat-quadra'
@@ -612,7 +566,6 @@ export interface FileRouteTypes {
     | '/gestao'
     | '/inadimplentes'
     | '/inteligencia'
-    | '/liberacao-quadras'
     | '/limpeza'
     | '/login'
     | '/mapa'
@@ -623,7 +576,6 @@ export interface FileRouteTypes {
     | '/recepcao'
     | '/relatorio-cobranca'
     | '/relatorios'
-    | '/reservas-recusadas'
     | '/reset-password'
     | '/setup'
     | '/tarefas'
@@ -657,8 +609,6 @@ export interface RootRouteChildren {
   CategoriasRoute: typeof CategoriasRoute
   ClienteRoute: typeof ClienteRoute
   ClientesRoute: typeof ClientesRouteWithChildren
-  CobrancaFollowupsRoute: typeof CobrancaFollowupsRoute
-  ComissoesRoute: typeof ComissoesRoute
   EsperaRoute: typeof EsperaRoute
   EstoqueRoute: typeof EstoqueRoute
   FatQuadraRoute: typeof FatQuadraRoute
@@ -667,7 +617,6 @@ export interface RootRouteChildren {
   GestaoRoute: typeof GestaoRoute
   InadimplentesRoute: typeof InadimplentesRoute
   InteligenciaRoute: typeof InteligenciaRoute
-  LiberacaoQuadrasRoute: typeof LiberacaoQuadrasRoute
   LimpezaRoute: typeof LimpezaRoute
   LoginRoute: typeof LoginRoute
   MapaRoute: typeof MapaRouteWithChildren
@@ -678,7 +627,6 @@ export interface RootRouteChildren {
   RecepcaoRoute: typeof RecepcaoRoute
   RelatorioCobrancaRoute: typeof RelatorioCobrancaRoute
   RelatoriosRoute: typeof RelatoriosRoute
-  ReservasRecusadasRoute: typeof ReservasRecusadasRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SetupRoute: typeof SetupRoute
   TarefasRoute: typeof TarefasRoute
@@ -728,20 +676,6 @@ declare module '@tanstack/react-router' {
       path: '/clientes'
       fullPath: '/clientes'
       preLoaderRoute: typeof ClientesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/cobranca-followups': {
-      id: '/cobranca-followups'
-      path: '/cobranca-followups'
-      fullPath: '/cobranca-followups'
-      preLoaderRoute: typeof CobrancaFollowupsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/comissoes': {
-      id: '/comissoes'
-      path: '/comissoes'
-      fullPath: '/comissoes'
-      preLoaderRoute: typeof ComissoesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/espera': {
@@ -798,13 +732,6 @@ declare module '@tanstack/react-router' {
       path: '/inteligencia'
       fullPath: '/inteligencia'
       preLoaderRoute: typeof InteligenciaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/liberacao-quadras': {
-      id: '/liberacao-quadras'
-      path: '/liberacao-quadras'
-      fullPath: '/liberacao-quadras'
-      preLoaderRoute: typeof LiberacaoQuadrasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/limpeza': {
@@ -875,13 +802,6 @@ declare module '@tanstack/react-router' {
       path: '/relatorios'
       fullPath: '/relatorios'
       preLoaderRoute: typeof RelatoriosRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/reservas-recusadas': {
-      id: '/reservas-recusadas'
-      path: '/reservas-recusadas'
-      fullPath: '/reservas-recusadas'
-      preLoaderRoute: typeof ReservasRecusadasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -1131,8 +1051,6 @@ const rootRouteChildren: RootRouteChildren = {
   CategoriasRoute: CategoriasRoute,
   ClienteRoute: ClienteRoute,
   ClientesRoute: ClientesRouteWithChildren,
-  CobrancaFollowupsRoute: CobrancaFollowupsRoute,
-  ComissoesRoute: ComissoesRoute,
   EsperaRoute: EsperaRoute,
   EstoqueRoute: EstoqueRoute,
   FatQuadraRoute: FatQuadraRoute,
@@ -1141,7 +1059,6 @@ const rootRouteChildren: RootRouteChildren = {
   GestaoRoute: GestaoRoute,
   InadimplentesRoute: InadimplentesRoute,
   InteligenciaRoute: InteligenciaRoute,
-  LiberacaoQuadrasRoute: LiberacaoQuadrasRoute,
   LimpezaRoute: LimpezaRoute,
   LoginRoute: LoginRoute,
   MapaRoute: MapaRouteWithChildren,
@@ -1152,7 +1069,6 @@ const rootRouteChildren: RootRouteChildren = {
   RecepcaoRoute: RecepcaoRoute,
   RelatorioCobrancaRoute: RelatorioCobrancaRoute,
   RelatoriosRoute: RelatoriosRoute,
-  ReservasRecusadasRoute: ReservasRecusadasRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SetupRoute: SetupRoute,
   TarefasRoute: TarefasRoute,
