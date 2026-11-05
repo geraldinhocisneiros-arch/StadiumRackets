@@ -145,79 +145,6 @@ export type Database = {
         }
         Relationships: []
       }
-      attachment_folders: {
-        Row: {
-          created_at: string
-          created_by: string | null
-          id: string
-          name: string
-          parent_id: string | null
-        }
-        Insert: {
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          name: string
-          parent_id?: string | null
-        }
-        Update: {
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          name?: string
-          parent_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "attachment_folders_parent_id_fkey"
-            columns: ["parent_id"]
-            isOneToOne: false
-            referencedRelation: "attachment_folders"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      attachments: {
-        Row: {
-          created_at: string
-          folder_id: string | null
-          id: string
-          mime_type: string | null
-          name: string
-          size_bytes: number | null
-          storage_path: string
-          uploaded_by: string | null
-        }
-        Insert: {
-          created_at?: string
-          folder_id?: string | null
-          id?: string
-          mime_type?: string | null
-          name: string
-          size_bytes?: number | null
-          storage_path: string
-          uploaded_by?: string | null
-        }
-        Update: {
-          created_at?: string
-          folder_id?: string | null
-          id?: string
-          mime_type?: string | null
-          name?: string
-          size_bytes?: number | null
-          storage_path?: string
-          uploaded_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "attachments_folder_id_fkey"
-            columns: ["folder_id"]
-            isOneToOne: false
-            referencedRelation: "attachment_folders"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       audit_logs: {
         Row: {
           action: string
@@ -253,243 +180,6 @@ export type Database = {
           id?: string
         }
         Relationships: []
-      }
-      boleiro_ranking_history: {
-        Row: {
-          booking_id: string
-          candidates_snapshot: Json
-          created_at: string
-          id: string
-          manual_by: string | null
-          manual_reason: string | null
-          resolved_at: string
-          selected_client_id: string | null
-          stage: number
-          tiebreak_criterion: string | null
-          was_manual: boolean
-          was_specific_request: boolean
-          window_id: string | null
-        }
-        Insert: {
-          booking_id: string
-          candidates_snapshot?: Json
-          created_at?: string
-          id?: string
-          manual_by?: string | null
-          manual_reason?: string | null
-          resolved_at?: string
-          selected_client_id?: string | null
-          stage?: number
-          tiebreak_criterion?: string | null
-          was_manual?: boolean
-          was_specific_request?: boolean
-          window_id?: string | null
-        }
-        Update: {
-          booking_id?: string
-          candidates_snapshot?: Json
-          created_at?: string
-          id?: string
-          manual_by?: string | null
-          manual_reason?: string | null
-          resolved_at?: string
-          selected_client_id?: string | null
-          stage?: number
-          tiebreak_criterion?: string | null
-          was_manual?: boolean
-          was_specific_request?: boolean
-          window_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "boleiro_ranking_history_booking_id_fkey"
-            columns: ["booking_id"]
-            isOneToOne: false
-            referencedRelation: "court_bookings"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "boleiro_ranking_history_selected_client_id_fkey"
-            columns: ["selected_client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "boleiro_ranking_history_window_id_fkey"
-            columns: ["window_id"]
-            isOneToOne: false
-            referencedRelation: "boleiro_ranking_windows"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      boleiro_ranking_interests: {
-        Row: {
-          booking_id: string
-          client_id: string
-          id: string
-          registered_at: string
-          resolved_at: string | null
-          status: string
-          window_id: string | null
-          withdrawn_at: string | null
-        }
-        Insert: {
-          booking_id: string
-          client_id: string
-          id?: string
-          registered_at?: string
-          resolved_at?: string | null
-          status?: string
-          window_id?: string | null
-          withdrawn_at?: string | null
-        }
-        Update: {
-          booking_id?: string
-          client_id?: string
-          id?: string
-          registered_at?: string
-          resolved_at?: string | null
-          status?: string
-          window_id?: string | null
-          withdrawn_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "boleiro_ranking_interests_booking_id_fkey"
-            columns: ["booking_id"]
-            isOneToOne: false
-            referencedRelation: "court_bookings"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "boleiro_ranking_interests_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "boleiro_ranking_interests_window_id_fkey"
-            columns: ["window_id"]
-            isOneToOne: false
-            referencedRelation: "boleiro_ranking_windows"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      boleiro_ranking_settings: {
-        Row: {
-          daily_limit: number
-          id: boolean
-          rules_enabled: boolean
-          updated_at: string
-          updated_by: string | null
-          weekly_limit: number
-          window_minutes: number
-        }
-        Insert: {
-          daily_limit?: number
-          id?: boolean
-          rules_enabled?: boolean
-          updated_at?: string
-          updated_by?: string | null
-          weekly_limit?: number
-          window_minutes?: number
-        }
-        Update: {
-          daily_limit?: number
-          id?: boolean
-          rules_enabled?: boolean
-          updated_at?: string
-          updated_by?: string | null
-          weekly_limit?: number
-          window_minutes?: number
-        }
-        Relationships: []
-      }
-      boleiro_ranking_windows: {
-        Row: {
-          booking_id: string
-          closes_at: string
-          created_at: string
-          id: string
-          opens_at: string
-          stage: number
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          booking_id: string
-          closes_at: string
-          created_at?: string
-          id?: string
-          opens_at?: string
-          stage?: number
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          booking_id?: string
-          closes_at?: string
-          created_at?: string
-          id?: string
-          opens_at?: string
-          stage?: number
-          status?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "boleiro_ranking_windows_booking_id_fkey"
-            columns: ["booking_id"]
-            isOneToOne: false
-            referencedRelation: "court_bookings"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      boleiro_suspensions: {
-        Row: {
-          client_id: string
-          created_at: string
-          created_by: string | null
-          ends_on: string
-          id: string
-          reason: string | null
-          starts_on: string
-          updated_at: string
-        }
-        Insert: {
-          client_id: string
-          created_at?: string
-          created_by?: string | null
-          ends_on: string
-          id?: string
-          reason?: string | null
-          starts_on: string
-          updated_at?: string
-        }
-        Update: {
-          client_id?: string
-          created_at?: string
-          created_by?: string | null
-          ends_on?: string
-          id?: string
-          reason?: string | null
-          starts_on?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "boleiro_suspensions_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       booking_confirmations: {
         Row: {
@@ -551,7 +241,6 @@ export type Database = {
           is_demo: boolean
           notes: string | null
           pending_resolved: Json
-          remotes_report: Json | null
           stock_report: Json | null
           totals_counted: Json
           totals_system: Json
@@ -568,7 +257,6 @@ export type Database = {
           is_demo?: boolean
           notes?: string | null
           pending_resolved?: Json
-          remotes_report?: Json | null
           stock_report?: Json | null
           totals_counted?: Json
           totals_system?: Json
@@ -585,7 +273,6 @@ export type Database = {
           is_demo?: boolean
           notes?: string | null
           pending_resolved?: Json
-          remotes_report?: Json | null
           stock_report?: Json | null
           totals_counted?: Json
           totals_system?: Json
@@ -920,57 +607,6 @@ export type Database = {
           },
         ]
       }
-      client_schedule_boleiro_overrides: {
-        Row: {
-          boleiro_client_id: string | null
-          boleiro_name: string | null
-          boleiro_open: boolean
-          client_schedule_id: string
-          created_at: string
-          created_by: string | null
-          id: string
-          override_date: string
-          updated_at: string
-        }
-        Insert: {
-          boleiro_client_id?: string | null
-          boleiro_name?: string | null
-          boleiro_open?: boolean
-          client_schedule_id: string
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          override_date: string
-          updated_at?: string
-        }
-        Update: {
-          boleiro_client_id?: string | null
-          boleiro_name?: string | null
-          boleiro_open?: boolean
-          client_schedule_id?: string
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          override_date?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "client_schedule_boleiro_overrides_boleiro_client_id_fkey"
-            columns: ["boleiro_client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "client_schedule_boleiro_overrides_client_schedule_id_fkey"
-            columns: ["client_schedule_id"]
-            isOneToOne: false
-            referencedRelation: "client_schedules"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       client_schedule_day_notes: {
         Row: {
           client_schedule_id: string
@@ -1058,9 +694,6 @@ export type Database = {
       }
       client_schedules: {
         Row: {
-          boleiro_client_id: string | null
-          boleiro_name: string | null
-          boleiro_open: boolean | null
           client_id: string
           court: number | null
           created_at: string
@@ -1077,9 +710,6 @@ export type Database = {
           weekday: number
         }
         Insert: {
-          boleiro_client_id?: string | null
-          boleiro_name?: string | null
-          boleiro_open?: boolean | null
           client_id: string
           court?: number | null
           created_at?: string
@@ -1096,9 +726,6 @@ export type Database = {
           weekday: number
         }
         Update: {
-          boleiro_client_id?: string | null
-          boleiro_name?: string | null
-          boleiro_open?: boolean | null
           client_id?: string
           court?: number | null
           created_at?: string
@@ -1115,13 +742,6 @@ export type Database = {
           weekday?: number
         }
         Relationships: [
-          {
-            foreignKeyName: "client_schedules_boleiro_client_id_fkey"
-            columns: ["boleiro_client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "client_schedules_client_id_fkey"
             columns: ["client_id"]
@@ -1234,7 +854,6 @@ export type Database = {
           birth_day: number | null
           birth_month: number | null
           category_id: string | null
-          club_valid_until: string | null
           created_at: string
           custom_amount: number | null
           default_discount_percent: number
@@ -1246,10 +865,8 @@ export type Database = {
           is_demo: boolean
           is_gympass: boolean
           linked_teacher_id: string | null
-          prepay_exempt: boolean
           notes: string | null
           phone: string | null
-          preferred_boleiro: string | null
           profile_photo_consent_at: string | null
           profile_photo_path: string | null
           profile_photo_updated_at: string | null
@@ -1264,7 +881,6 @@ export type Database = {
           birth_day?: number | null
           birth_month?: number | null
           category_id?: string | null
-          club_valid_until?: string | null
           created_at?: string
           custom_amount?: number | null
           default_discount_percent?: number
@@ -1276,10 +892,8 @@ export type Database = {
           is_demo?: boolean
           is_gympass?: boolean
           linked_teacher_id?: string | null
-          prepay_exempt?: boolean
           notes?: string | null
           phone?: string | null
-          preferred_boleiro?: string | null
           profile_photo_consent_at?: string | null
           profile_photo_path?: string | null
           profile_photo_updated_at?: string | null
@@ -1294,7 +908,6 @@ export type Database = {
           birth_day?: number | null
           birth_month?: number | null
           category_id?: string | null
-          club_valid_until?: string | null
           created_at?: string
           custom_amount?: number | null
           default_discount_percent?: number
@@ -1306,10 +919,8 @@ export type Database = {
           is_demo?: boolean
           is_gympass?: boolean
           linked_teacher_id?: string | null
-          prepay_exempt?: boolean
           notes?: string | null
           phone?: string | null
-          preferred_boleiro?: string | null
           profile_photo_consent_at?: string | null
           profile_photo_path?: string | null
           profile_photo_updated_at?: string | null
@@ -1339,57 +950,6 @@ export type Database = {
             columns: ["teacher_id"]
             isOneToOne: false
             referencedRelation: "teachers"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      club_renewals: {
-        Row: {
-          amount: number
-          bucket: string
-          client_id: string
-          created_at: string
-          id: string
-          processed_at: string | null
-          renewal_date: string
-          source_payment_id: string | null
-          updated_at: string
-        }
-        Insert: {
-          amount: number
-          bucket: string
-          client_id: string
-          created_at?: string
-          id?: string
-          processed_at?: string | null
-          renewal_date: string
-          source_payment_id?: string | null
-          updated_at?: string
-        }
-        Update: {
-          amount?: number
-          bucket?: string
-          client_id?: string
-          created_at?: string
-          id?: string
-          processed_at?: string | null
-          renewal_date?: string
-          source_payment_id?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "club_renewals_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "club_renewals_source_payment_id_fkey"
-            columns: ["source_payment_id"]
-            isOneToOne: false
-            referencedRelation: "payments"
             referencedColumns: ["id"]
           },
         ]
@@ -1539,60 +1099,6 @@ export type Database = {
         }
         Relationships: []
       }
-      court_booking_boleiro_requests: {
-        Row: {
-          booking_id: string
-          client_id: string
-          id: string
-          note: string | null
-          position: number | null
-          requested_at: string
-          requested_by: string | null
-          resolved_at: string | null
-          resolved_by: string | null
-          status: string
-        }
-        Insert: {
-          booking_id: string
-          client_id: string
-          id?: string
-          note?: string | null
-          position?: number | null
-          requested_at?: string
-          requested_by?: string | null
-          resolved_at?: string | null
-          resolved_by?: string | null
-          status?: string
-        }
-        Update: {
-          booking_id?: string
-          client_id?: string
-          id?: string
-          note?: string | null
-          position?: number | null
-          requested_at?: string
-          requested_by?: string | null
-          resolved_at?: string | null
-          resolved_by?: string | null
-          status?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "court_booking_boleiro_requests_booking_id_fkey"
-            columns: ["booking_id"]
-            isOneToOne: false
-            referencedRelation: "court_bookings"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "court_booking_boleiro_requests_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       court_booking_participants: {
         Row: {
           booking_id: string
@@ -1631,10 +1137,6 @@ export type Database = {
       }
       court_bookings: {
         Row: {
-          boleiro_assigned_at: string | null
-          boleiro_client_id: string | null
-          boleiro_name: string | null
-          boleiro_open: boolean
           booking_date: string
           cancel_reason: string | null
           cancelled_at: string | null
@@ -1652,8 +1154,6 @@ export type Database = {
           guest_type: Database["public"]["Enums"]["booking_guest_type"] | null
           hold_expires_at: string | null
           prepaid_at_booking: boolean
-          prepayment_override_by: string | null
-          prepayment_override_reason: string | null
           id: string
           is_demo: boolean
           notes: string | null
@@ -1663,10 +1163,6 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          boleiro_assigned_at?: string | null
-          boleiro_client_id?: string | null
-          boleiro_name?: string | null
-          boleiro_open?: boolean
           booking_date: string
           cancel_reason?: string | null
           cancelled_at?: string | null
@@ -1684,8 +1180,6 @@ export type Database = {
           guest_type?: Database["public"]["Enums"]["booking_guest_type"] | null
           hold_expires_at?: string | null
           prepaid_at_booking?: boolean
-          prepayment_override_by?: string | null
-          prepayment_override_reason?: string | null
           id?: string
           is_demo?: boolean
           notes?: string | null
@@ -1695,10 +1189,6 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          boleiro_assigned_at?: string | null
-          boleiro_client_id?: string | null
-          boleiro_name?: string | null
-          boleiro_open?: boolean
           booking_date?: string
           cancel_reason?: string | null
           cancelled_at?: string | null
@@ -1716,8 +1206,6 @@ export type Database = {
           guest_type?: Database["public"]["Enums"]["booking_guest_type"] | null
           hold_expires_at?: string | null
           prepaid_at_booking?: boolean
-          prepayment_override_by?: string | null
-          prepayment_override_reason?: string | null
           id?: string
           is_demo?: boolean
           notes?: string | null
@@ -1727,13 +1215,6 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "court_bookings_boleiro_client_id_fkey"
-            columns: ["boleiro_client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "court_bookings_category_id_fkey"
             columns: ["category_id"]
@@ -1760,69 +1241,6 @@ export type Database = {
             columns: ["teacher_id"]
             isOneToOne: false
             referencedRelation: "teachers"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      court_remote_loans: {
-        Row: {
-          booking_id: string | null
-          client_id: string | null
-          court: number
-          created_at: string
-          holder_name: string
-          id: string
-          lent_at: string
-          lent_by: string | null
-          notes: string | null
-          return_notes: string | null
-          returned_at: string | null
-          returned_by: string | null
-          updated_at: string
-        }
-        Insert: {
-          booking_id?: string | null
-          client_id?: string | null
-          court: number
-          created_at?: string
-          holder_name: string
-          id?: string
-          lent_at?: string
-          lent_by?: string | null
-          notes?: string | null
-          return_notes?: string | null
-          returned_at?: string | null
-          returned_by?: string | null
-          updated_at?: string
-        }
-        Update: {
-          booking_id?: string | null
-          client_id?: string | null
-          court?: number
-          created_at?: string
-          holder_name?: string
-          id?: string
-          lent_at?: string
-          lent_by?: string | null
-          notes?: string | null
-          return_notes?: string | null
-          returned_at?: string | null
-          returned_by?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "court_remote_loans_booking_id_fkey"
-            columns: ["booking_id"]
-            isOneToOne: false
-            referencedRelation: "court_bookings"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "court_remote_loans_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
         ]
@@ -2125,21 +1543,6 @@ export type Database = {
         }
         Relationships: []
       }
-      demo_users: {
-        Row: {
-          created_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       fixed_court_waitlist: {
         Row: {
           cancel_reason: string | null
@@ -2358,93 +1761,6 @@ export type Database = {
           id?: string
           status?: string
           title?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      meeting_items: {
-        Row: {
-          assignee_id: string | null
-          carried_from: string | null
-          created_at: string
-          created_by: string | null
-          details: string | null
-          id: string
-          meeting_id: string
-          outcome: string | null
-          source: string
-          status: string
-          title: string
-          updated_at: string
-        }
-        Insert: {
-          assignee_id?: string | null
-          carried_from?: string | null
-          created_at?: string
-          created_by?: string | null
-          details?: string | null
-          id?: string
-          meeting_id: string
-          outcome?: string | null
-          source?: string
-          status?: string
-          title: string
-          updated_at?: string
-        }
-        Update: {
-          assignee_id?: string | null
-          carried_from?: string | null
-          created_at?: string
-          created_by?: string | null
-          details?: string | null
-          id?: string
-          meeting_id?: string
-          outcome?: string | null
-          source?: string
-          status?: string
-          title?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "meeting_items_carried_from_fkey"
-            columns: ["carried_from"]
-            isOneToOne: false
-            referencedRelation: "meeting_items"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "meeting_items_meeting_id_fkey"
-            columns: ["meeting_id"]
-            isOneToOne: false
-            referencedRelation: "meetings"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      meetings: {
-        Row: {
-          created_at: string
-          created_by: string | null
-          id: string
-          meeting_date: string
-          notes: string | null
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          meeting_date: string
-          notes?: string | null
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          meeting_date?: string
-          notes?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -2726,9 +2042,6 @@ export type Database = {
           category_id: string | null
           charge_id: string | null
           client_id: string | null
-          club_charge_kind: string | null
-          club_months: number | null
-          club_taxa_sub: string | null
           commission_user_id: string | null
           court: number | null
           created_at: string
@@ -2756,9 +2069,6 @@ export type Database = {
           category_id?: string | null
           charge_id?: string | null
           client_id?: string | null
-          club_charge_kind?: string | null
-          club_months?: number | null
-          club_taxa_sub?: string | null
           commission_user_id?: string | null
           court?: number | null
           created_at?: string
@@ -2786,9 +2096,6 @@ export type Database = {
           category_id?: string | null
           charge_id?: string | null
           client_id?: string | null
-          club_charge_kind?: string | null
-          club_months?: number | null
-          club_taxa_sub?: string | null
           commission_user_id?: string | null
           court?: number | null
           created_at?: string
@@ -2952,65 +2259,6 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "portal_signup_tokens_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      prepay_release_requests: {
-        Row: {
-          booking_date: string
-          booking_id: string | null
-          client_id: string
-          court: number | null
-          decided_at: string | null
-          decided_by: string | null
-          decision_note: string | null
-          end_time: string | null
-          id: string
-          reason: string
-          requested_at: string
-          requested_by: string | null
-          start_time: string | null
-          status: string
-        }
-        Insert: {
-          booking_date: string
-          booking_id?: string | null
-          client_id: string
-          court?: number | null
-          decided_at?: string | null
-          decided_by?: string | null
-          decision_note?: string | null
-          end_time?: string | null
-          id?: string
-          reason: string
-          requested_at?: string
-          requested_by?: string | null
-          start_time?: string | null
-          status?: string
-        }
-        Update: {
-          booking_date?: string
-          booking_id?: string | null
-          client_id?: string
-          court?: number | null
-          decided_at?: string | null
-          decided_by?: string | null
-          decision_note?: string | null
-          end_time?: string | null
-          id?: string
-          reason?: string
-          requested_at?: string
-          requested_by?: string | null
-          start_time?: string | null
-          status?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "prepay_release_requests_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
@@ -3730,8 +2978,6 @@ export type Database = {
     Functions: {
       admin_save_client_schedule: {
         Args: {
-          _boleiro_name: string | null
-          _boleiro_open: boolean
           _client_id: string
           _court: number | null
           _end_time: string
@@ -3795,135 +3041,7 @@ export type Database = {
         Returns: undefined
       }
       auth_user_exists: { Args: { _user_id: string }; Returns: boolean }
-      boleiro_agenda_range: {
-        Args: { _end_date: string; _start_date: string }
-        Returns: Json
-      }
-      boleiro_cancel_my_slot: {
-        Args: { _booking_id: string }
-        Returns: boolean
-      }
-      boleiro_leave: { Args: { _booking_id: string }; Returns: boolean }
-      boleiro_map_bookings: { Args: { _date: string }; Returns: Json }
-      boleiro_map_schedule_exceptions: {
-        Args: { _date: string; _weekday: number }
-        Returns: Json
-      }
-      boleiro_map_schedule_overrides: { Args: { _date: string }; Returns: Json }
-      boleiro_map_schedules:
-        | { Args: { _weekday: number }; Returns: Json }
-        | { Args: { _date?: string; _weekday: number }; Returns: Json }
-      boleiro_open_slots_range: {
-        Args: { _end_date: string; _start_date: string }
-        Returns: Json
-      }
-      boleiro_ranking_admin_dashboard: {
-        Args: {
-          _client_id?: string
-          _date_from?: string
-          _date_to?: string
-          _status?: string
-        }
-        Returns: {
-          active: boolean
-          cancellations: number
-          client_id: string
-          full_name: string
-          interests_registered: number
-          last_ranking_at: string
-          rankings_range: number
-          rankings_specific: number
-          rankings_today: number
-          rankings_week: number
-          suspended: boolean
-        }[]
-      }
-      boleiro_ranking_apply_specific: {
-        Args: { _booking_id: string; _client_id: string; _display_name: string }
-        Returns: {
-          message: string
-          ok: boolean
-        }[]
-      }
-      boleiro_ranking_history_list: {
-        Args: {
-          _booking_id?: string
-          _client_id?: string
-          _date_from?: string
-          _date_to?: string
-        }
-        Returns: {
-          booking_date: string
-          booking_id: string
-          candidates_snapshot: Json
-          court: number
-          end_time: string
-          id: string
-          manual_by: string
-          manual_reason: string
-          resolved_at: string
-          selected_client_id: string
-          selected_name: string
-          stage: number
-          start_time: string
-          tiebreak_criterion: string
-          was_manual: boolean
-          was_specific_request: boolean
-          window_id: string
-        }[]
-      }
-      boleiro_ranking_manual_assign: {
-        Args: { _booking_id: string; _client_id: string; _reason: string }
-        Returns: {
-          message: string
-          ok: boolean
-        }[]
-      }
-      boleiro_ranking_my_status: { Args: never; Returns: Json }
-      boleiro_ranking_open_window: {
-        Args: { _booking_id: string }
-        Returns: string
-      }
-      boleiro_ranking_pick_winner: {
-        Args: {
-          _booking_id: string
-          _ignore_daily_limit: boolean
-          _window_id: string
-        }
-        Returns: {
-          client_id: string
-          daily_count: number
-          interest_id: string
-          last_assigned_at: string
-          registered_at: string
-          weekly_count: number
-        }[]
-      }
-      boleiro_ranking_register_interest: {
-        Args: { _booking_id: string }
-        Returns: string
-      }
-      boleiro_ranking_resolve_window: {
-        Args: { _window_id: string }
-        Returns: undefined
-      }
-      boleiro_ranking_suggest_weekly_limit: {
-        Args: never
-        Returns: {
-          active_boleiro_count: number
-          ranking_count_this_week: number
-          suggested_weekly_limit: number
-        }[]
-      }
-      boleiro_ranking_withdraw_interest: {
-        Args: { _booking_id: string }
-        Returns: boolean
-      }
       can_access_client_photo: { Args: { _name: string }; Returns: boolean }
-      can_boleiro_request_booking: {
-        Args: { _booking_id: string; _client_id: string; _requested_by: string }
-        Returns: boolean
-      }
       cleaning_delete_purchase: { Args: { _id: string }; Returns: boolean }
       cleaning_register_purchase: {
         Args: {
@@ -4000,37 +3118,12 @@ export type Database = {
           starting_balance: number
         }[]
       }
-      client_requires_prepayment: {
-        Args: { _client_id: string }
-        Returns: boolean
-      }
       clients_open_debt: {
         Args: { _client_ids?: string[] }
         Returns: {
           client_id: string
           debt_amount: number
           geral_debt: number
-        }[]
-      }
-      club_membership_can_book: {
-        Args: { _client_id: string }
-        Returns: boolean
-      }
-      club_membership_notify_due: { Args: never; Returns: undefined }
-      club_membership_status_list: {
-        Args: never
-        Returns: {
-          category_id: string
-          category_name: string
-          client_id: string
-          club_valid_until: string
-          days_overdue: number
-          full_name: string
-          is_due: boolean
-          mensalidade_amount: number
-          open_taxa_total: number
-          phone: string
-          total_due: number
         }[]
       }
       cobranca_assignees: {
@@ -4282,22 +3375,10 @@ export type Database = {
         }
         Returns: boolean
       }
-      is_boleiro_suspended: {
-        Args: { _client_id: string; _on_date?: string }
-        Returns: boolean
-      }
       is_demo_user: { Args: { _uid: string }; Returns: boolean }
       is_portal_client_of: { Args: { _client_id: string }; Returns: boolean }
       is_ranking_booking: { Args: { _booking_id: string }; Returns: boolean }
       is_ranking_category: { Args: { _category_id: string }; Returns: boolean }
-      list_boleiros: {
-        Args: never
-        Returns: {
-          client_id: string
-          full_name: string
-          suspended_until: string
-        }[]
-      }
       log_audit_event: {
         Args: {
           _action: string
@@ -4306,14 +3387,6 @@ export type Database = {
           _entity_id: string
         }
         Returns: undefined
-      }
-      meeting_team: {
-        Args: never
-        Returns: {
-          full_name: string
-          is_recepcao: boolean
-          user_id: string
-        }[]
       }
       move_booking_today: {
         Args: {
@@ -4354,56 +3427,13 @@ export type Database = {
         Returns: string
       }
       normalize_category: { Args: { _name: string }; Returns: string }
-      notify_boleiros_vaga_aberta_booking: {
-        Args: { _booking_id: string }
-        Returns: undefined
-      }
       notify_waitlist_slot_available: {
         Args: { _date: string; _end: string; _start: string }
         Returns: undefined
       }
-      prepay_release_decide: {
-        Args: { _approve: boolean; _note?: string; _request_id: string }
-        Returns: Json
-      }
-      prepay_release_list: {
-        Args: { _status?: string }
-        Returns: {
-          booking_date: string
-          booking_id: string | null
-          client_id: string
-          client_name: string | null
-          court: number | null
-          decided_at: string | null
-          decided_by_name: string | null
-          decision_note: string | null
-          end_time: string | null
-          id: string
-          reason: string
-          requested_at: string
-          requested_by_name: string | null
-          start_time: string | null
-          status: string
-        }[]
-      }
-      prepay_release_request: {
-        Args: {
-          _booking_date: string
-          _client_id: string
-          _court: number
-          _end: string
-          _reason: string
-          _start: string
-        }
-        Returns: Json
-      }
       open_debt_report: {
         Args: { _from: string; _to: string }
         Returns: Json
-      }
-      open_boleiro_request_for_booking: {
-        Args: { _booking_id: string }
-        Returns: string
       }
       payment_stock_item_name: {
         Args: { _category_id: string; _client_id: string }
@@ -4416,22 +3446,6 @@ export type Database = {
       }
       portal_cancel_fixed_schedule: {
         Args: { _date: string; _reason?: string; _schedule_id: string }
-        Returns: string
-      }
-      portal_client_club_booking_source: {
-        Args: { _client_id: string }
-        Returns: Database["public"]["Enums"]["booking_source"]
-      }
-      portal_create_club_booking: {
-        Args: {
-          _client_id: string
-          _court: number
-          _date: string
-          _end: string
-          _guest_name: string
-          _guest_type: Database["public"]["Enums"]["booking_guest_type"]
-          _start: string
-        }
         Returns: string
       }
       portal_create_paid_booking_hold: {
@@ -4530,10 +3544,6 @@ export type Database = {
         Args: { _query: string }
         Returns: { full_name: string; id: string }[]
       }
-      promote_next_boleiro_waiter: {
-        Args: { _booking_id: string }
-        Returns: string
-      }
       recife_month_end: { Args: { _d?: string }; Returns: string }
       recife_today: { Args: never; Returns: string }
       recife_week_start: { Args: { _d?: string }; Returns: string }
@@ -4545,10 +3555,7 @@ export type Database = {
         Args: { _reason?: string; _request_id: string }
         Returns: Json
       }
-      request_boleiro_for_booking: {
-        Args: { _booking_id: string }
-        Returns: string
-      }
+      resolve_portal_email_by_phone: { Args: { _phone: string }; Returns: string }
       request_court_booking_hold: {
         Args: {
           _court: number
@@ -4641,10 +3648,9 @@ export type Database = {
         | "recepcionista"
         | "diretoria"
         | "professor"
-        | "boleiro"
-        | "limpeza"
-      booking_guest_type: "clubista" | "convidado" | "batedor"
-      booking_source: "avulsa" | "professor" | "clubista" | "mini_clube"
+                | "limpeza"
+      booking_guest_type: "convidado" | "batedor"
+      booking_source: "avulsa" | "professor"
       charge_status: "aberta" | "paga" | "atrasada" | "cancelada"
       payment_method:
         | "dinheiro"
@@ -4807,11 +3813,10 @@ export const Constants = {
         "recepcionista",
         "diretoria",
         "professor",
-        "boleiro",
         "limpeza",
       ],
-      booking_guest_type: ["clubista", "convidado", "batedor"],
-      booking_source: ["avulsa", "professor", "clubista", "mini_clube"],
+      booking_guest_type: [ "convidado", "batedor"],
+      booking_source: ["avulsa", "professor", ],
       charge_status: ["aberta", "paga", "atrasada", "cancelada"],
       payment_method: [
         "dinheiro",
