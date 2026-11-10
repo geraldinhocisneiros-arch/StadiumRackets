@@ -7,8 +7,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Download, ChevronDown, ChevronRight } from "lucide-react";
 import * as XLSX from "xlsx";
 import { fmtBRL, normalizeText } from "@/lib/format";
@@ -17,12 +30,15 @@ import { fetchAll } from "@/lib/fetchAll";
 // Comissão do professor Johny Lourenço: 10% do crédito UTILIZADO no mês
 // pelos clientes vinculados a ele — não do que foi creditado (depositado).
 //
-// "Utilizado" = débitos lançados na conta corrente do cliente no mês
-// (quadra, luz etc.), mesmo que o saldo fique negativo. Ficam de fora:
+// "Utilizado" = SÓ aluguel de quadra debitado na conta corrente do cliente
+// no mês (reserva avulsa ou presença de fixo lançada pelo mapa/caixa com
+// quadra informada), mesmo que o saldo fique negativo. Ficam de fora:
+//  - ranking, luz e qualquer débito sem quadra (inclusive lançamento
+//    manual na ficha) — aparecem na lista como "Outro débito";
 //  - transferências de saldo para outro cliente (não é consumo);
 //  - "Saldo anterior" (dívida trazida de antes, não é consumo do mês).
-// Estornos (crédito lançado com a categoria "Estorno") devolvem consumo
-// cobrado, então são abatidos da base.
+// Estornos não abatem automaticamente (não dá pra saber se devolvem quadra
+// ou ranking): aparecem marcados para conferência.
 //
 // Cliente vinculado = professor principal no cadastro (clients.teacher_id)
 // ou vínculo adicional (client_teachers). O vínculo considerado é o ATUAL.
@@ -57,14 +73,23 @@ interface Entry {
   description: string;
   entry_date: string;
   created_at: string;
-  payments: { client_categories: { name: string } | null } | null;
+  payments: { court: number | null; client_categories: { name: string } | null } | null;
 }
 
-type Kind = "uso" | "estorno" | "credito" | "transferencia" | "saldo_anterior";
+type Kind = "uso" | "outro_debito" | "estorno" | "credito" | "transferencia" | "saldo_anterior";
+
+// Categorias que nunca são aluguel de quadra, mesmo com quadra informada.
+const NOT_RENTAL_CATEGORIES = [
+  "ranking masculino",
+  "ranking feminino",
+  "energia (luz)",
+  "saldo anterior",
+];
 
 const KIND_LABEL: Record<Kind, string> = {
-  uso: "Uso (conta)",
-  estorno: "Estorno (abate)",
+  uso: "Aluguel de quadra (conta)",
+  outro_debito: "Outro débito (não conta)",
+  estorno: "Estorno (confira)",
   credito: "Crédito (não conta)",
   transferencia: "Transferência (não conta)",
   saldo_anterior: "Saldo anterior (não conta)",
@@ -77,7 +102,9 @@ function classify(e: Entry): Kind {
   if (e.entry_type === "debito") {
     if (isTransfer) return "transferencia";
     if (cat === "saldo anterior") return "saldo_anterior";
-    return "uso";
+    if (cat.startsWith("ranking") || NOT_RENTAL_CATEGORIES.includes(cat)) return "outro_debito";
+    if (e.payments?.court != null && e.payments.court > 0) return "uso";
+    return "outro_debito";
   }
   if (cat === "estorno") return "estorno";
   if (isTransfer) return "transferencia";
@@ -149,7 +176,7 @@ function ComissaoJohnyPage() {
           const chunk = ids.slice(i, i + 150);
           const rows = await fetchAll<Entry>(
             "account_entries",
-            "id, client_id, entry_type, amount, description, entry_date, created_at, payments(client_categories!payments_category_id_fkey(name))",
+            "id, client_id, entry_type, amount, description, entry_date, created_at, payments(court, client_categories!payments_category_id_fkey(name))",
             {
               build: (q) =>
                 q
@@ -187,21 +214,24 @@ function ComissaoJohnyPage() {
       .map((c) => {
         const list = byClient.get(c.id) ?? [];
         let usado = 0;
+        let outros = 0;
         let estornos = 0;
         let creditado = 0;
         list.forEach((e) => {
           const k = classify(e);
           const v = Number(e.amount);
           if (k === "uso") usado += v;
+          else if (k === "outro_debito") outros += v;
           else if (k === "estorno") estornos += v;
           else if (k === "credito") creditado += v;
         });
-        const base = round2(usado - estornos);
+        const base = round2(usado);
         return {
           client: c,
           entries: list,
           usado: round2(usado),
           estornos: round2(estornos),
+          outros: round2(outros),
           creditado: round2(creditado),
           base,
           comissao: round2((base * COMMISSION_PERCENT) / 100),
@@ -218,10 +248,11 @@ function ComissaoJohnyPage() {
           creditado: t.creditado + r.creditado,
           usado: t.usado + r.usado,
           estornos: t.estornos + r.estornos,
+          outros: t.outros + r.outros,
           base: t.base + r.base,
           comissao: t.comissao + r.comissao,
         }),
-        { creditado: 0, usado: 0, estornos: 0, base: 0, comissao: 0 },
+        { creditado: 0, usado: 0, estornos: 0, outros: 0, base: 0, comissao: 0 },
       ),
     [rows],
   );
@@ -241,17 +272,17 @@ function ComissaoJohnyPage() {
     const resumo = rows.map((r) => ({
       Cliente: r.client.full_name,
       "Creditado no mês (R$)": r.creditado,
-      "Utilizado (R$)": r.usado,
-      "Estornos (R$)": r.estornos,
-      "Base da comissão (R$)": r.base,
+      "Outros débitos, não contam (R$)": r.outros,
+      "Estornos, conferir (R$)": r.estornos,
+      "Aluguel de quadra = base (R$)": r.base,
       [`Comissão ${COMMISSION_PERCENT}% (R$)`]: r.comissao,
     }));
     resumo.push({
       Cliente: "TOTAL",
       "Creditado no mês (R$)": round2(totals.creditado),
-      "Utilizado (R$)": round2(totals.usado),
-      "Estornos (R$)": round2(totals.estornos),
-      "Base da comissão (R$)": round2(totals.base),
+      "Outros débitos, não contam (R$)": round2(totals.outros),
+      "Estornos, conferir (R$)": round2(totals.estornos),
+      "Aluguel de quadra = base (R$)": round2(totals.base),
       [`Comissão ${COMMISSION_PERCENT}% (R$)`]: round2(totals.comissao),
     });
     const names = new Map(clients.map((c) => [c.id, c.full_name]));
@@ -280,7 +311,11 @@ function ComissaoJohnyPage() {
             vinculados — não sobre o que foi creditado. Saldo negativo continua contando.
           </p>
         </div>
-        <Button variant="outline" onClick={handleExport} disabled={!teacherId || loading || rows.length === 0}>
+        <Button
+          variant="outline"
+          onClick={handleExport}
+          disabled={!teacherId || loading || rows.length === 0}
+        >
           <Download className="h-4 w-4 mr-2" /> Baixar Excel
         </Button>
       </div>
@@ -289,7 +324,11 @@ function ComissaoJohnyPage() {
         <CardContent className="pt-6 grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>Mês</Label>
-            <Input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} />
+            <Input
+              type="month"
+              value={month}
+              onChange={(e) => e.target.value && setMonth(e.target.value)}
+            />
           </div>
           {!johnyFound && (
             <div className="space-y-2">
@@ -320,26 +359,35 @@ function ComissaoJohnyPage() {
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Stat title="Creditado no mês (referência)" value={fmtBRL(totals.creditado)} />
-        <Stat title="Crédito utilizado (base)" value={fmtBRL(totals.base)} />
-        <Stat title={`Comissão a pagar (${COMMISSION_PERCENT}%)`} value={fmtBRL(totals.comissao)} accent />
+        <Stat title="Aluguel de quadra (base)" value={fmtBRL(totals.base)} />
+        <Stat
+          title={`Comissão a pagar (${COMMISSION_PERCENT}%)`}
+          value={fmtBRL(totals.comissao)}
+          accent
+        />
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Clientes vinculados com movimento no mês</CardTitle>
           <CardDescription>
-            Conta: débitos da conta corrente (quadra, luz etc.). Não conta: créditos/depósitos,
-            transferências entre clientes e "Saldo anterior". Estornos abatem a base. Clique no
-            cliente para conferir cada lançamento.
+            Conta: só aluguel de quadra debitado na conta (avulso ou fixo, com quadra lançada). Não
+            conta: ranking, luz, débitos sem quadra, créditos/depósitos, transferências e "Saldo
+            anterior". Estornos não abatem sozinhos — confira se devolvem quadra. Clique no cliente
+            para ver cada lançamento.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {error ? (
-            <div className="py-6 text-center text-destructive text-sm">Erro ao carregar: {error}</div>
+            <div className="py-6 text-center text-destructive text-sm">
+              Erro ao carregar: {error}
+            </div>
           ) : loading ? (
             <div className="py-6 text-center text-muted-foreground text-sm">Carregando...</div>
           ) : !teacherId ? (
-            <div className="py-6 text-center text-muted-foreground text-sm">Selecione o professor.</div>
+            <div className="py-6 text-center text-muted-foreground text-sm">
+              Selecione o professor.
+            </div>
           ) : rows.length === 0 ? (
             <div className="py-6 text-center text-muted-foreground text-sm">
               Nenhum movimento dos {clients.length} clientes vinculados neste mês.
@@ -351,9 +399,9 @@ function ComissaoJohnyPage() {
                   <TableRow>
                     <TableHead>Cliente</TableHead>
                     <TableHead className="text-right">Creditado</TableHead>
-                    <TableHead className="text-right">Utilizado</TableHead>
+                    <TableHead className="text-right">Outros débitos</TableHead>
                     <TableHead className="text-right">Estornos</TableHead>
-                    <TableHead className="text-right">Base</TableHead>
+                    <TableHead className="text-right">Aluguel de quadra</TableHead>
                     <TableHead className="text-right">Comissão</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -361,22 +409,43 @@ function ComissaoJohnyPage() {
                   {rows.map((r) => {
                     const isOpen = open.has(r.client.id);
                     return [
-                      <TableRow key={r.client.id} className="cursor-pointer" onClick={() => toggle(r.client.id)}>
+                      <TableRow
+                        key={r.client.id}
+                        className="cursor-pointer"
+                        onClick={() => toggle(r.client.id)}
+                      >
                         <TableCell className="font-medium">
                           <span className="inline-flex items-center gap-1">
-                            {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                            {isOpen ? (
+                              <ChevronDown className="h-4 w-4" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4" />
+                            )}
                             {r.client.full_name}
                           </span>
-                          {!r.client.active && <span className="ml-2 text-xs text-muted-foreground">(inativo)</span>}
+                          {!r.client.active && (
+                            <span className="ml-2 text-xs text-muted-foreground">(inativo)</span>
+                          )}
                         </TableCell>
-                        <TableCell className="text-right text-muted-foreground">{fmtBRL(r.creditado)}</TableCell>
-                        <TableCell className="text-right">{fmtBRL(r.usado)}</TableCell>
-                        <TableCell className="text-right">{r.estornos ? `− ${fmtBRL(r.estornos)}` : "—"}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {fmtBRL(r.creditado)}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {r.outros ? fmtBRL(r.outros) : "—"}
+                        </TableCell>
+                        <TableCell className="text-right text-amber-700">
+                          {r.estornos ? fmtBRL(r.estornos) : "—"}
+                        </TableCell>
                         <TableCell className="text-right">{fmtBRL(r.base)}</TableCell>
-                        <TableCell className="text-right font-semibold text-success">{fmtBRL(r.comissao)}</TableCell>
+                        <TableCell className="text-right font-semibold text-success">
+                          {fmtBRL(r.comissao)}
+                        </TableCell>
                       </TableRow>,
                       isOpen && (
-                        <TableRow key={`${r.client.id}-detail`} className="bg-muted/30 hover:bg-muted/30">
+                        <TableRow
+                          key={`${r.client.id}-detail`}
+                          className="bg-muted/30 hover:bg-muted/30"
+                        >
                           <TableCell colSpan={6}>
                             <div className="flex justify-end mb-2">
                               <Link
@@ -391,8 +460,13 @@ function ComissaoJohnyPage() {
                               {r.entries.map((e) => {
                                 const k = classify(e);
                                 return (
-                                  <div key={e.id} className="flex flex-wrap items-center gap-2 text-xs">
-                                    <span className="w-20 text-muted-foreground">{e.entry_date.split("-").reverse().join("/")}</span>
+                                  <div
+                                    key={e.id}
+                                    className="flex flex-wrap items-center gap-2 text-xs"
+                                  >
+                                    <span className="w-20 text-muted-foreground">
+                                      {e.entry_date.split("-").reverse().join("/")}
+                                    </span>
                                     <span className="flex-1 min-w-40">{e.description}</span>
                                     <Badge
                                       variant="outline"
@@ -409,7 +483,8 @@ function ComissaoJohnyPage() {
                                     <span
                                       className={`w-24 text-right ${e.entry_type === "debito" ? "text-destructive" : "text-success"}`}
                                     >
-                                      {e.entry_type === "debito" ? "−" : "+"} {fmtBRL(Number(e.amount))}
+                                      {e.entry_type === "debito" ? "−" : "+"}{" "}
+                                      {fmtBRL(Number(e.amount))}
                                     </span>
                                   </div>
                                 );
@@ -422,13 +497,19 @@ function ComissaoJohnyPage() {
                   })}
                   <TableRow className="font-semibold">
                     <TableCell>Total</TableCell>
-                    <TableCell className="text-right text-muted-foreground">{fmtBRL(totals.creditado)}</TableCell>
-                    <TableCell className="text-right">{fmtBRL(totals.usado)}</TableCell>
-                    <TableCell className="text-right">
-                      {totals.estornos ? `− ${fmtBRL(totals.estornos)}` : "—"}
+                    <TableCell className="text-right text-muted-foreground">
+                      {fmtBRL(totals.creditado)}
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {totals.outros ? fmtBRL(totals.outros) : "—"}
+                    </TableCell>
+                    <TableCell className="text-right text-amber-700">
+                      {totals.estornos ? fmtBRL(totals.estornos) : "—"}
                     </TableCell>
                     <TableCell className="text-right">{fmtBRL(totals.base)}</TableCell>
-                    <TableCell className="text-right text-success">{fmtBRL(totals.comissao)}</TableCell>
+                    <TableCell className="text-right text-success">
+                      {fmtBRL(totals.comissao)}
+                    </TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
