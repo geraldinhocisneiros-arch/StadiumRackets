@@ -14,6 +14,7 @@ import { Route as CaixaRouteImport } from './routes/caixa'
 import { Route as CategoriasRouteImport } from './routes/categorias'
 import { Route as ClienteRouteImport } from './routes/cliente'
 import { Route as ClientesRouteImport } from './routes/clientes'
+import { Route as ComissaoJohnyRouteImport } from './routes/comissao-johny'
 import { Route as EsperaRouteImport } from './routes/espera'
 import { Route as EstoqueRouteImport } from './routes/estoque'
 import { Route as FatQuadraRouteImport } from './routes/fat-quadra'
@@ -81,6 +82,11 @@ const ClienteRoute = ClienteRouteImport.update({
 const ClientesRoute = ClientesRouteImport.update({
   id: '/clientes',
   path: '/clientes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComissaoJohnyRoute = ComissaoJohnyRouteImport.update({
+  id: '/comissao-johny',
+  path: '/comissao-johny',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EsperaRoute = EsperaRouteImport.update({
@@ -307,6 +313,7 @@ export interface FileRoutesByFullPath {
   '/categorias': typeof CategoriasRoute
   '/cliente': typeof ClienteRoute
   '/clientes': typeof ClientesRouteWithChildren
+  '/comissao-johny': typeof ComissaoJohnyRoute
   '/espera': typeof EsperaRoute
   '/estoque': typeof EstoqueRoute
   '/fat-quadra': typeof FatQuadraRoute
@@ -357,6 +364,7 @@ export interface FileRoutesByTo {
   '/categorias': typeof CategoriasRoute
   '/cliente': typeof ClienteRoute
   '/clientes': typeof ClientesRouteWithChildren
+  '/comissao-johny': typeof ComissaoJohnyRoute
   '/espera': typeof EsperaRoute
   '/estoque': typeof EstoqueRoute
   '/fat-quadra': typeof FatQuadraRoute
@@ -407,6 +415,7 @@ export interface FileRoutesById {
   '/categorias': typeof CategoriasRoute
   '/cliente': typeof ClienteRoute
   '/clientes': typeof ClientesRouteWithChildren
+  '/comissao-johny': typeof ComissaoJohnyRoute
   '/espera': typeof EsperaRoute
   '/estoque': typeof EstoqueRoute
   '/fat-quadra': typeof FatQuadraRoute
@@ -459,6 +468,7 @@ export interface FileRouteTypes {
     | '/categorias'
     | '/cliente'
     | '/clientes'
+    | '/comissao-johny'
     | '/espera'
     | '/estoque'
     | '/fat-quadra'
@@ -509,6 +519,7 @@ export interface FileRouteTypes {
     | '/categorias'
     | '/cliente'
     | '/clientes'
+    | '/comissao-johny'
     | '/espera'
     | '/estoque'
     | '/fat-quadra'
@@ -558,6 +569,7 @@ export interface FileRouteTypes {
     | '/categorias'
     | '/cliente'
     | '/clientes'
+    | '/comissao-johny'
     | '/espera'
     | '/estoque'
     | '/fat-quadra'
@@ -609,6 +621,7 @@ export interface RootRouteChildren {
   CategoriasRoute: typeof CategoriasRoute
   ClienteRoute: typeof ClienteRoute
   ClientesRoute: typeof ClientesRouteWithChildren
+  ComissaoJohnyRoute: typeof ComissaoJohnyRoute
   EsperaRoute: typeof EsperaRoute
   EstoqueRoute: typeof EstoqueRoute
   FatQuadraRoute: typeof FatQuadraRoute
@@ -676,6 +689,13 @@ declare module '@tanstack/react-router' {
       path: '/clientes'
       fullPath: '/clientes'
       preLoaderRoute: typeof ClientesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/comissao-johny': {
+      id: '/comissao-johny'
+      path: '/comissao-johny'
+      fullPath: '/comissao-johny'
+      preLoaderRoute: typeof ComissaoJohnyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/espera': {
@@ -1051,6 +1071,7 @@ const rootRouteChildren: RootRouteChildren = {
   CategoriasRoute: CategoriasRoute,
   ClienteRoute: ClienteRoute,
   ClientesRoute: ClientesRouteWithChildren,
+  ComissaoJohnyRoute: ComissaoJohnyRoute,
   EsperaRoute: EsperaRoute,
   EstoqueRoute: EstoqueRoute,
   FatQuadraRoute: FatQuadraRoute,

@@ -133,6 +133,12 @@ const NAV: NavItem[] = [
     rolesAllowed: ["diretoria", "recepcionista"],
   },
   {
+    to: "/comissao-johny",
+    label: "Comissão Johny",
+    icon: GraduationCap,
+    rolesAllowed: ["admin", "diretoria"],
+  },
+  {
     to: "/professores/vinculos",
     label: "Auditoria de vínculos",
     icon: GraduationCap,
@@ -188,6 +194,7 @@ const NAV_GROUPS: Array<{
     children: [
       "/professores",
       "/professores/relatorio",
+      "/comissao-johny",
       "/professores/vinculos",
       "/vinculos-professor",
       "/trocas-cliente",
