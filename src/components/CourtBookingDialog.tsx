@@ -263,8 +263,9 @@ export function CourtBookingDialog({
   const [payMethod, setPayMethod] = useState<string>("");
   const [payDirection, setPayDirection] = useState<"" | "credito" | "debito">("");
   const [payReceived, setPayReceived] = useState<boolean>(false);
-  // Quadra dividida + débito em conta corrente: divide o valor da quadra em
-  // partes iguais e debita a parte de cada jogador na conta dele.
+  // Quadra dividida entre 2+ clientes: divide o valor cheio da quadra em
+  // partes iguais e lança a parte de cada um (no débito em conta corrente,
+  // na conta de cada um).
   const [splitDebit, setSplitDebit] = useState<boolean>(true);
   // RKG Dupla na tela de detalhes: "igual" divide o valor total entre os 4
   // jogadores; "individual" deixa digitar o valor de cada jogador.
@@ -1096,7 +1097,7 @@ export function CourtBookingDialog({
       // Quadra dividida no débito em conta corrente: cada jogador recebe a
       // sua parte igual do valor, debitada na própria conta.
       const splitTargets =
-        splitDebit && payDirection === "debito" && !wantsPayment2 && uniqueParticipants.length > 0
+        splitDebit && !wantsPayment2 && uniqueParticipants.length > 0
           ? [clientId, ...uniqueParticipants]
           : [clientId];
       const splitAmounts = splitEvenly(amountNum, splitTargets.length);
@@ -2291,7 +2292,7 @@ export function CourtBookingDialog({
     // Quadra dividida no débito em conta corrente: lança a parte igual de
     // cada jogador (titular + participantes) na conta de cada um.
     const viewSplitTargets =
-      splitDebit && payDirection === "debito" && !viewPendingPaymentId
+      splitDebit && !viewPendingPaymentId
         ? Array.from(
             new Set(
               [existing.client_id, ...existingParticipants.map((p) => p.client_id)].filter(
@@ -3479,8 +3480,7 @@ export function CourtBookingDialog({
                         Pagamento recebido
                       </label>
                     </div>
-                    {payDirection === "debito" &&
-                      !viewIsDupla &&
+                    {!viewIsDupla &&
                       !viewPendingPaymentId &&
                       existingParticipants.some((p) => p.client_id !== existing.client_id) && (
                         <SplitDebitOption
@@ -4139,8 +4139,7 @@ export function CourtBookingDialog({
                       Preencha o valor para gerar automaticamente o lançamento no caixa
                       vinculado ao cliente, categoria, quadra e horário.
                     </div>
-                    {payDirection === "debito" &&
-                      !wantsPayment2 &&
+                    {!wantsPayment2 &&
                       extraClientIds.some((id) => id && id !== clientId) && (
                         <SplitDebitOption
                           checked={splitDebit}
@@ -4160,7 +4159,7 @@ export function CourtBookingDialog({
                     )}
                   </>
                 )}
-                {wantsPayment && extraClientIds[0] && (
+                {wantsPayment && extraClientIds[0] && !splitDebit && (
                   <div className="space-y-3 rounded-md border p-3 bg-background">
                     <label className="flex items-center gap-2 text-sm font-medium">
                       <Checkbox
@@ -4313,9 +4312,9 @@ function SplitDebitOption({
         <span className="block text-xs text-muted-foreground">
           {checked
             ? amount > 0
-              ? `Cada um terá ${fmtBRL(parts[parts.length - 1]!)} debitado na própria conta corrente${parts[0] !== parts[parts.length - 1] ? ` (o titular fica com ${fmtBRL(parts[0]!)} pelo centavo de diferença)` : ""}.`
-              : "Cada um terá a sua parte debitada na própria conta corrente."
-            : "Desmarcado: o valor inteiro vai para a conta de um só cliente."}
+              ? `Cada um terá um lançamento de ${fmtBRL(parts[parts.length - 1]!)}${parts[0] !== parts[parts.length - 1] ? ` (o titular fica com ${fmtBRL(parts[0]!)} pelo centavo de diferença)` : ""}. No débito em conta corrente, cada parte cai na conta de cada um.`
+              : "Cada um terá um lançamento com a sua parte."
+            : "Desmarcado: o valor inteiro vai para um só cliente."}
         </span>
       </span>
     </label>
