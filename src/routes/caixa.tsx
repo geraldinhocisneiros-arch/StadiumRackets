@@ -2004,7 +2004,22 @@ function CaixaPage() {
           <Button variant="outline" onClick={handlePrint} disabled={visiblePayments.length === 0}>
             <Printer className="h-4 w-4 mr-2" /> Imprimir
           </Button>
-          <Dialog open={open} onOpenChange={setOpen}>
+          <Dialog
+            open={open}
+            onOpenChange={(v) => {
+              // Abrir pelo botão começa sempre do zero: sem isso, fechar sem
+              // salvar deixava os dados digitados para a próxima abertura. A
+              // abertura automática (cancelamento tardio) usa setOpen direto
+              // e mantém o formulário pré-preenchido.
+              if (v) {
+                setForm(emptyForm());
+                setAmountManuallyEdited(false);
+                setReceiptFile(null);
+                setReceiveDebt(EMPTY_RECEIVE_OPEN_DEBT);
+              }
+              setOpen(v);
+            }}
+          >
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" /> Novo pagamento
