@@ -197,6 +197,7 @@ export function ClientSchedulesCard({
                 <Plus className="h-4 w-4 mr-2" /> Adicionar horário
               </Button>
               <ScheduleDialog
+                open={open}
                 clientId={clientId}
                 editing={editing}
                 teachers={teachers.filter((t) => t.active || t.id === editing?.teacher_id)}
@@ -268,12 +269,14 @@ export function ClientSchedulesCard({
 }
 
 function ScheduleDialog({
+  open,
   clientId,
   editing,
   teachers,
   onSaved,
   onClose,
 }: {
+  open: boolean;
   clientId: string;
   editing: Schedule | null;
   teachers: Teacher[];
@@ -295,6 +298,7 @@ function ScheduleDialog({
   } | null>(null);
 
   useEffect(() => {
+    if (!open) return;
     setWeekday(editing ? String(editing.weekday) : "2");
     setStartTime(editing ? timeShort(editing.start_time) : "09:00");
     setEndTime(editing ? timeShort(editing.end_time) : "10:00");
@@ -304,7 +308,7 @@ function ScheduleDialog({
     setValidFrom(editing?.valid_from ?? "");
     setValidUntil(editing?.valid_until ?? "");
     setShareConflict(null);
-  }, [editing]);
+  }, [editing, open]);
 
   // Quem já ocupa essa quadra/dia/horário — usado tanto pra oferecer
   // "dividir a quadra" quando dá conflito quanto pra saber quais ids

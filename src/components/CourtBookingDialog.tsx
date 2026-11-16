@@ -420,6 +420,7 @@ export function CourtBookingDialog({
       setGuestName(existing.guest_name ?? "");
       setGuestType((existing.guest_type as "" | "convidado" | "batedor" | null) ?? "");
       setNotes(existing.notes ?? "");
+      setDayNote("");
       const sH = timeToHours(existing.start_time);
       const eH = timeToHours(existing.end_time);
       setStartHour(sH);
@@ -455,6 +456,7 @@ export function CourtBookingDialog({
       setGuestName("");
       setGuestType("");
       setNotes("");
+      setDayNote("");
       setStartHour(hour);
       setEndHour(hour + 1);
       setEditCourt(court);
