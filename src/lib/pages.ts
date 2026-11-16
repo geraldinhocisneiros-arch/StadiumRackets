@@ -17,7 +17,7 @@ export const MANAGEABLE_PAGES: ManageablePage[] = [
   { key: "categorias", label: "Categorias", description: "Gestão de categorias de cliente" },
   { key: "usuarios", label: "Usuários", description: "Gestão de usuários e permissões" },
   { key: "obras", label: "Obras", description: "Acompanhamento de obras" },
-  { key: "estoque", label: "Estoque", description: "Controle de Terno de bola e Grip" },
+  { key: "estoque", label: "Lojinha", description: "Produtos à venda: preços e quantidades" },
   {
     key: "inadimplencia",
     label: "Inadimplência",

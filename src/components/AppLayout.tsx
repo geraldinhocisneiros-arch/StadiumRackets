@@ -19,6 +19,7 @@ import {
   Sparkles,
   DollarSign,
   Package,
+  Store,
   FileText,
   GraduationCap,
   ArrowUp,
@@ -118,7 +119,7 @@ const NAV: NavItem[] = [
   { to: "/relatorios", label: "Relatórios", icon: BarChart3, rolesAllowed: ["diretoria"] },
   { to: "/inteligencia", label: "Inteligência", icon: Lightbulb, rolesAllowed: ["diretoria"] },
   { to: "/usuarios", label: "Usuários", icon: UserCog, pageKey: "usuarios" },
-  { to: "/estoque", label: "Estoque", icon: Package, pageKey: "estoque" },
+  { to: "/estoque", label: "Lojinha", icon: Store, pageKey: "estoque" },
   { to: "/limpeza", label: "Limpeza", icon: Sparkles, rolesAllowed: ["diretoria", "limpeza"] },
   {
     to: "/professores",
