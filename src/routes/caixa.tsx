@@ -616,10 +616,9 @@ function CaixaPage() {
     const c = clients.find((c) => c.id === form.clientIds[0]);
     if (!c) return;
     const v = c.custom_amount ?? c.client_categories?.default_amount ?? 0;
-    // Mensalista sem desconto próprio cadastrado usa 10% por padrão — mesma
-    // regra do formulário de pagamento em Finanças (NewPaymentDialog.tsx).
-    const clientDiscount =
-      c.default_discount_percent != null ? Number(c.default_discount_percent) : 10;
+    // Stadium: sem desconto padrão de mensalista — só o desconto cadastrado
+    // no próprio cliente (0 = valor cheio).
+    const clientDiscount = Number(c.default_discount_percent) || 0;
     // Só aplica desconto se a categoria SELECIONADA no form for mensalista
     // E não for crédito em C/C (creditar na conta corrente não tem desconto).
     // Se o usuário digitou o valor manualmente, assume que já é o valor final

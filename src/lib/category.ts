@@ -66,19 +66,10 @@ export const isNonRevenueCategory = (name: string | null | undefined): boolean =
   return NON_REVENUE_CATEGORIES.has(n) || lojinhaCategoryNames.has(n);
 };
 
-// Desconto efetivo do cliente nas locações. O cadastro (Clientes) mostra
-// 10% sugerido para todo Mensalista que tem 0 salvo no banco — sem esta
-// regra, o mapa cobrava o preço cheio de um mensalista cujo cadastro
-// "parece" ter 10%. Valor explícito > 0 no cadastro sempre prevalece.
-export const MENSALISTA_DEFAULT_DISCOUNT = 10;
-
+// Desconto efetivo do cliente nas locações. Na Stadium o Mensalista NÃO
+// tem desconto padrão: vale só o desconto cadastrado no próprio cliente
+// (0 = valor cheio da tabela de preços).
 export const effectiveClientDiscount = (
   client:
     { default_discount_percent?: number | null; category_name?: string | null } | null | undefined,
-): number => {
-  const stored = Number(client?.default_discount_percent) || 0;
-  if (stored > 0) return stored;
-  return normalizeCategoryName(client?.category_name) === "mensalista"
-    ? MENSALISTA_DEFAULT_DISCOUNT
-    : 0;
-};
+): number => Number(client?.default_discount_percent) || 0;

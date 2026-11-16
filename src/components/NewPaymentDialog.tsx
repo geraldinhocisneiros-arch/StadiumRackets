@@ -208,14 +208,10 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
     }
 
     const c = clients.find((cl) => cl.id === form.clientId);
-    let discountToApply: number | null = null;
-    if (c?.default_discount_percent != null) {
-      discountToApply = c.default_discount_percent;
-    } else {
-      discountToApply = 10;
-    }
+    // Stadium: sem desconto padrão de mensalista — só o do cadastro do cliente.
+    const discountToApply = Number(c?.default_discount_percent) || 0;
 
-    if (discountToApply != null) {
+    if (discountToApply > 0) {
       setForm((f) => (f.discountPercent ? f : { ...f, discountPercent: String(discountToApply) }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

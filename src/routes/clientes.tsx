@@ -622,23 +622,6 @@ export function ClientDialog({
     }
   }, [open, editing]);
 
-  // Auto-preenche 10% de desconto padrão quando a categoria selecionada é "mensalista"
-  // e o campo ainda está vazio. Assim ao criar novo cliente ou trocar para mensalista
-  // no cadastro, o desconto já vem sugerido (pode ser ajustado manualmente).
-  useEffect(() => {
-    if (!open) return;
-    if (categoryId === "none" || !categories.length) return;
-    const cat = categories.find((c) => c.id === categoryId);
-    const norm = (cat?.name ?? "")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .trim();
-    if (norm === "mensalista" && defaultDiscountPercent.trim() === "") {
-      setDefaultDiscountPercent("10");
-    }
-  }, [categoryId, categories, open, defaultDiscountPercent]);
-
   const handleSubmit = async (e: React.FormEvent, force = false) => {
     e.preventDefault();
     setSubmitting(true);
