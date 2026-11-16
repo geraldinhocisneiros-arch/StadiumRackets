@@ -32,7 +32,7 @@ import { format, startOfMonth, endOfMonth, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { logAction } from "@/lib/audit";
-import { isSaldoAnterior, isStockCategory } from "@/lib/category";
+import { isSaldoAnterior, isStockCategory, isAvulsoCategoryName } from "@/lib/category";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { ClientDialog } from "@/routes/clientes";
 import { useUrlState } from "@/hooks/useUrlState";
@@ -642,7 +642,7 @@ function CaixaPage() {
   useEffect(() => {
     if (amountManuallyEdited) return;
     const catNorm = normalizeCategoryName(categories.find((c) => c.id === form.categoryId)?.name);
-    const isAvulso = catNorm === "avulso";
+    const isAvulso = isAvulsoCategoryName(catNorm);
     if (form.accountDirection !== "debito" && !isAvulso) return;
     if (!form.startTime || !form.endTime || !form.paidAt) return;
     const wd = weekdayFromYmd(form.paidAt);
@@ -671,7 +671,7 @@ function CaixaPage() {
   useEffect(() => {
     if (editAmountManuallyEdited) return;
     const catNorm = normalizeCategoryName(categories.find((c) => c.id === editForm.categoryId)?.name);
-    const isAvulso = catNorm === "avulso";
+    const isAvulso = isAvulsoCategoryName(catNorm);
     if (editForm.accountDirection !== "debito" && !isAvulso) return;
     if (!editForm.startTime || !editForm.endTime || !editForm.paidAt) return;
     const wd = weekdayFromYmd(editForm.paidAt);
