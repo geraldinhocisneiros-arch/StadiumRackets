@@ -32,7 +32,7 @@ import { format, startOfMonth, endOfMonth, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { logAction } from "@/lib/audit";
-import { isSaldoAnterior } from "@/lib/category";
+import { isSaldoAnterior, isStockCategory } from "@/lib/category";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { ClientDialog } from "@/routes/clientes";
 import { useUrlState } from "@/hooks/useUrlState";
@@ -77,6 +77,7 @@ interface CategoryRow {
   id: string;
   name: string;
   default_amount: number;
+  stock_item_id?: string | null;
 }
 interface PaymentRow {
   id: string;
@@ -370,7 +371,7 @@ function CaixaPage() {
           "id, full_name, custom_amount, category_id, default_discount_percent, active, client_categories(name, default_amount)",
           { build: (q) => q.eq("active", true) },
         ),
-        supabase.from("client_categories").select("id, name, default_amount").eq("active", true).order("name"),
+        supabase.from("client_categories").select("id, name, default_amount, stock_item_id").eq("active", true).order("name"),
         supabase
           .from("price_table")
           .select("id, categories, weekday, start_time, end_time, price_per_hour, courts, starts_on, ends_on"),
@@ -712,7 +713,7 @@ function CaixaPage() {
     const isEstorno = catNorm === "estorno";
     const isGympass = catNorm === "credito gympass";
     const isAutoCCPayload = isGympass;
-    const isStockCat = catNorm === "grip" || catNorm === "terno de bola";
+    const isStockCat = isStockCategory(categories.find((c) => c.id === f.categoryId));
     const isRanking = catNorm === "ranking masculino" || catNorm === "ranking feminino";
 
     const rawAmount = overrideAmount !== undefined ? overrideAmount : Number(f.amount) || 0;
@@ -1317,7 +1318,7 @@ function CaixaPage() {
     const isMensalistaDebito = fCatNorm === "mensalista" && f.accountDirection === "debito";
     const isMensalistaCredito = fCatNorm === "mensalista" && f.accountDirection === "credito";
     const isInscricaoRanking = fCatNorm === "inscricao ranking masculino";
-    const isStockCat = fCatNorm === "grip" || fCatNorm === "terno de bola";
+    const isStockCat = isStockCategory(fCat);
     const noTimeCourt = [
       "grip",
       "inscricao ranking masculino",
@@ -1325,7 +1326,7 @@ function CaixaPage() {
       "tenis de mesa (mensalista)",
       "terno de bola",
       "credito gympass",
-    ].includes(fCatNorm) || isMensalistaCredito || isEstorno;
+    ].includes(fCatNorm) || isStockCat || isMensalistaCredito || isEstorno;
     return (
       <div className="space-y-4">
         {isCreate ? (
