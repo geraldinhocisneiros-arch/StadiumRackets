@@ -11,6 +11,7 @@ import { Pencil, Plus, Settings2, Store, Trash2, PackagePlus } from "lucide-reac
 import { StockEntryDialog } from "@/components/StockEntryDialog";
 import { StockProductDialog, type LojinhaProduct } from "@/components/StockProductDialog";
 import { useConfirm } from "@/hooks/useConfirm";
+import { LojinhaSalesPanel } from "@/components/LojinhaSalesPanel";
 import { fmtBRL } from "@/lib/format";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -40,6 +41,7 @@ function EstoquePage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"entrada" | "ajuste">("entrada");
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [productOpen, setProductOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<StockItem | null>(null);
   const confirm = useConfirm();
@@ -70,6 +72,7 @@ function EstoquePage() {
       setUsers(map);
     }
     setLoading(false);
+    setRefreshKey((k) => k + 1);
   }, []);
 
   useEffect(() => {
@@ -201,6 +204,8 @@ function EstoquePage() {
             );
           })}
         </div>
+
+        <LojinhaSalesPanel refreshKey={refreshKey} />
 
         <Card>
           <CardHeader>

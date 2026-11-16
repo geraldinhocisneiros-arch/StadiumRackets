@@ -40,8 +40,23 @@ const NON_REVENUE_CATEGORIES = new Set([
   "grip",
 ]);
 
-export const isNonRevenueCategory = (name: string | null | undefined): boolean =>
-  NON_REVENUE_CATEGORIES.has(normalizeCategoryName(name));
+// Produtos da Lojinha (categorias com stock_item_id) também ficam fora do
+// faturamento: a Lojinha tem gestão própria (cliente pega, paga ou fica
+// devendo). As telas que somam faturamento chamam registerLojinhaCategories
+// com as categorias que carregaram (select "id, name, stock_item_id").
+const lojinhaCategoryNames = new Set<string>();
+export const registerLojinhaCategories = (
+  cats: Array<{ name?: string | null; stock_item_id?: string | null }> | null | undefined,
+) => {
+  for (const c of cats ?? []) {
+    if (c.stock_item_id) lojinhaCategoryNames.add(normalizeCategoryName(c.name));
+  }
+};
+
+export const isNonRevenueCategory = (name: string | null | undefined): boolean => {
+  const n = normalizeCategoryName(name);
+  return NON_REVENUE_CATEGORIES.has(n) || lojinhaCategoryNames.has(n);
+};
 
 // Desconto efetivo do cliente nas locações. O cadastro (Clientes) mostra
 // 10% sugerido para todo Mensalista que tem 0 salvo no banco — sem esta
