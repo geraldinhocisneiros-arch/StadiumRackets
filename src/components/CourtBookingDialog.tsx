@@ -123,6 +123,17 @@ interface Props {
 
 const HALF_HOUR_STEP = 0.5;
 
+// Divide um valor em partes iguais (em centavos). A sobra de centavos vai
+// para os primeiros da lista, então a soma bate exatamente com o total.
+// Ex.: 100 / 3 → 33,34 · 33,33 · 33,33.
+export function splitEvenly(total: number, n: number): number[] {
+  if (n <= 1) return [Math.round(total * 100) / 100];
+  const cents = Math.round(total * 100);
+  const base = Math.floor(cents / n);
+  const rest = cents - base * n;
+  return Array.from({ length: n }, (_, i) => (base + (i < rest ? 1 : 0)) / 100);
+}
+
 function timeOptions(min: number, max: number): number[] {
   const start = Math.ceil(min / HALF_HOUR_STEP) * HALF_HOUR_STEP;
   const end = Math.floor(max / HALF_HOUR_STEP) * HALF_HOUR_STEP;
@@ -253,6 +264,9 @@ export function CourtBookingDialog({
   const [payMethod, setPayMethod] = useState<string>("");
   const [payDirection, setPayDirection] = useState<"" | "credito" | "debito">("");
   const [payReceived, setPayReceived] = useState<boolean>(false);
+  // Quadra dividida + débito em conta corrente: divide o valor da quadra em
+  // partes iguais e debita a parte de cada jogador na conta dele.
+  const [splitDebit, setSplitDebit] = useState<boolean>(true);
   // Lançamento do segundo jogador (ex.: partida de ranking em que cada
   // jogador paga de um jeito diferente — um na hora, outro na pasta).
   const [wantsPayment2, setWantsPayment2] = useState<boolean>(false);
@@ -1056,22 +1070,35 @@ export function CourtBookingDialog({
       // desatualizado num computador compartilhado onde outro recepcionista
       // acabou de trocar de sessão no mesmo navegador).
       const { data: freshUserData } = await supabase.auth.getUser();
-      const { error: payErr } = await supabase.from("payments").insert({
-        client_id: clientId,
-        category_id: categoryId,
-        amount: amountNum,
-        method: (payMethod || "outro") as never,
-        paid_at: paidAtIso,
-        start_time: startTime,
-        end_time: endTime,
-        court,
-        received: payReceived,
-        to_account: payDirection !== "",
-        account_direction: payDirection || null,
-        notes: `Auto (mapa) · ${courtShort(court)} · ${startTime.slice(0, 5)}–${endTime.slice(0, 5)}`,
-        recorded_by: freshUserData.user?.id ?? user?.id ?? null,
-        booking_id: inserted?.id ?? null,
-      });
+      // Quadra dividida no débito em conta corrente: cada jogador recebe a
+      // sua parte igual do valor, debitada na própria conta.
+      const splitTargets =
+        splitDebit && payDirection === "debito" && !wantsPayment2 && uniqueParticipants.length > 0
+          ? [clientId, ...uniqueParticipants]
+          : [clientId];
+      const splitAmounts = splitEvenly(amountNum, splitTargets.length);
+      const baseNotes = `Auto (mapa) · ${courtShort(court)} · ${startTime.slice(0, 5)}–${endTime.slice(0, 5)}`;
+      const { error: payErr } = await supabase.from("payments").insert(
+        splitTargets.map((cid, i) => ({
+          client_id: cid,
+          category_id: categoryId,
+          amount: splitAmounts[i]!,
+          method: (payMethod || "outro") as never,
+          paid_at: paidAtIso,
+          start_time: startTime,
+          end_time: endTime,
+          court,
+          received: payReceived,
+          to_account: payDirection !== "",
+          account_direction: payDirection || null,
+          notes:
+            splitTargets.length > 1
+              ? `${baseNotes} · dividido em ${splitTargets.length}`
+              : baseNotes,
+          recorded_by: freshUserData.user?.id ?? user?.id ?? null,
+          booking_id: inserted?.id ?? null,
+        })),
+      );
       if (payErr) {
         setSubmitting(false);
         toast.error(`Locação criada, mas falhou o lançamento: ${payErr.message}`);
@@ -1088,12 +1115,14 @@ export function CourtBookingDialog({
         if (debtErr) toast.error(`Quadra lançada, mas falhou o recebimento do débito: ${debtErr}`);
         else toast.success(`Débito em aberto recebido: ${fmtBRL(debtToReceive)}`);
       }
-      void offerWhatsAppPaymentNotification({
-        clientId,
-        amount: amountNum,
-        accountDirection: payDirection || null,
-        paidAt: paidAtIso,
-        startTime,
+      splitTargets.forEach((cid, i) => {
+        void offerWhatsAppPaymentNotification({
+          clientId: cid,
+          amount: splitAmounts[i]!,
+          accountDirection: payDirection || null,
+          paidAt: paidAtIso,
+          startTime,
+        });
       });
     }
 
@@ -2134,9 +2163,33 @@ export function CourtBookingDialog({
     // Se já existia um lançamento pendente (valor zerado) pra esta locação —
     // criado ao marcar o jogo de ranking no mapa — atualiza esse registro em
     // vez de criar um novo, pra não duplicar no caixa.
+    // Quadra dividida no débito em conta corrente: lança a parte igual de
+    // cada jogador (titular + participantes) na conta de cada um.
+    const viewSplitTargets =
+      splitDebit && payDirection === "debito" && !viewPendingPaymentId
+        ? Array.from(
+            new Set(
+              [existing.client_id, ...existingParticipants.map((p) => p.client_id)].filter(
+                (id): id is string => !!id,
+              ),
+            ),
+          )
+        : [targetClientId];
+    const viewSplitAmounts = splitEvenly(amountNum, viewSplitTargets.length);
     const { error } = viewPendingPaymentId
       ? await supabase.from("payments").update(payload).eq("id", viewPendingPaymentId)
-      : await supabase.from("payments").insert({ ...payload, booking_id: existing.id });
+      : await supabase.from("payments").insert(
+          viewSplitTargets.map((cid, i) => ({
+            ...payload,
+            client_id: cid,
+            amount: viewSplitAmounts[i]!,
+            notes:
+              viewSplitTargets.length > 1
+                ? `${payload.notes} · dividido em ${viewSplitTargets.length}`
+                : payload.notes,
+            booking_id: existing.id,
+          })),
+        );
     if (error) {
       setSubmitting(false);
       toast.error(error.message);
@@ -2154,14 +2207,20 @@ export function CourtBookingDialog({
     }
     setSubmitting(false);
     setReceiveDebt(EMPTY_RECEIVE_OPEN_DEBT);
-    void offerWhatsAppPaymentNotification({
-      clientId: targetClientId,
-      amount: amountNum,
-      accountDirection: payDirection || null,
-      paidAt: paidAtIso,
-      startTime: existing.start_time,
+    viewSplitTargets.forEach((cid, i) => {
+      void offerWhatsAppPaymentNotification({
+        clientId: cid,
+        amount: viewSplitAmounts[i]!,
+        accountDirection: payDirection || null,
+        paidAt: paidAtIso,
+        startTime: existing.start_time,
+      });
     });
-    toast.success("Lançamento criado");
+    toast.success(
+      viewSplitTargets.length > 1
+        ? `Valor dividido em ${viewSplitTargets.length}: ${viewSplitAmounts.map(fmtBRL).join(" · ")}`
+        : "Lançamento criado",
+    );
     setViewWantsPayment(false);
     setViewPendingPaymentId(null);
     setPayAmount("");
@@ -3238,6 +3297,22 @@ export function CourtBookingDialog({
                         Pagamento recebido
                       </label>
                     </div>
+                    {payDirection === "debito" &&
+                      !viewPendingPaymentId &&
+                      existingParticipants.some((p) => p.client_id !== existing.client_id) && (
+                        <SplitDebitOption
+                          checked={splitDebit}
+                          onChange={setSplitDebit}
+                          players={
+                            new Set(
+                              [existing.client_id, ...existingParticipants.map((p) => p.client_id)].filter(
+                                Boolean,
+                              ),
+                            ).size
+                          }
+                          amount={Number(payAmount.replace(",", ".")) || 0}
+                        />
+                      )}
                     {payDirection !== "debito" && (
                       <ReceiveOpenDebtOption
                         clientId={payTargetClientId || existing.client_id}
@@ -3876,6 +3951,18 @@ export function CourtBookingDialog({
                       Preencha o valor para gerar automaticamente o lançamento no caixa
                       vinculado ao cliente, categoria, quadra e horário.
                     </div>
+                    {payDirection === "debito" &&
+                      !wantsPayment2 &&
+                      extraClientIds.some((id) => id && id !== clientId) && (
+                        <SplitDebitOption
+                          checked={splitDebit}
+                          onChange={setSplitDebit}
+                          players={
+                            1 + new Set(extraClientIds.filter((id) => id && id !== clientId)).size
+                          }
+                          amount={Number(payAmount.replace(",", ".")) || 0}
+                        />
+                      )}
                     {payDirection !== "debito" && (
                       <ReceiveOpenDebtOption
                         clientId={clientId}
@@ -4013,6 +4100,39 @@ const WEEKDAY_OPTS = [
   { v: 5, label: "Sexta" },
   { v: 6, label: "Sábado" },
 ];
+
+function SplitDebitOption({
+  checked,
+  onChange,
+  players,
+  amount,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  players: number;
+  amount: number;
+}) {
+  const parts = splitEvenly(amount, players);
+  return (
+    <label className="flex items-start gap-2 rounded-md border border-primary/40 bg-primary/5 p-2 text-sm">
+      <Checkbox
+        className="mt-0.5"
+        checked={checked}
+        onCheckedChange={(v) => onChange(v === true)}
+      />
+      <span>
+        Dividir igualmente entre os {players} jogadores
+        <span className="block text-xs text-muted-foreground">
+          {checked
+            ? amount > 0
+              ? `Cada um terá ${fmtBRL(parts[parts.length - 1]!)} debitado na própria conta corrente${parts[0] !== parts[parts.length - 1] ? ` (o titular fica com ${fmtBRL(parts[0]!)} pelo centavo de diferença)` : ""}.`
+              : "Cada um terá a sua parte debitada na própria conta corrente."
+            : "Desmarcado: o valor inteiro vai para a conta de um só cliente."}
+        </span>
+      </span>
+    </label>
+  );
+}
 
 function HourRange({
   startHour,

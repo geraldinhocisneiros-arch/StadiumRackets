@@ -30,6 +30,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { toast } from "sonner";
+import { isStockCategory } from "@/lib/category";
 import { Loader2, Check, ChevronsUpDown, X, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logAction } from "@/lib/audit";
@@ -53,6 +54,7 @@ interface CategoryRow {
   id: string;
   name: string;
   default_amount: number;
+  stock_item_id?: string | null;
 }
 
 interface FormState {
@@ -133,7 +135,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
           "clients",
           "id, full_name, custom_amount, category_id, default_discount_percent, active, client_categories(name, default_amount)",
         ),
-        supabase.from("client_categories").select("id, name, default_amount").eq("active", true).order("name"),
+        supabase.from("client_categories").select("id, name, default_amount, stock_item_id").eq("active", true).order("name"),
         supabase.from("price_table").select("id, categories, weekday, start_time, end_time, price_per_hour, courts, starts_on, ends_on"),
       ]);
       setClients(
@@ -282,7 +284,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
     const discountPct = Math.min(Math.max(Number(form.discountPercent) || 0, 0), 100);
     const baseAmount = Number(form.amount) || 0;
     const mergedNotes = form.notes?.trim() || null;
-    const isStockCat = catSelNorm === "grip" || catSelNorm === "terno de bola";
+    const isStockCat = isStockCategory(categories.find((c) => c.id === form.categoryId));
     const qtyNum = isStockCat ? Math.max(1, parseInt(form.quantity, 10) || 1) : 1;
     // Busca o usuário logado agora (não o do contexto, que pode estar
     // desatualizado num computador compartilhado onde outro recepcionista
@@ -345,7 +347,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
     .toLowerCase()
     .trim();
   const isEstorno = catNorm === "estorno";
-  const isStockCat = catNorm === "grip" || catNorm === "terno de bola";
+  const isStockCat = isStockCategory(cat);
   const isAutoCC = catNorm === "credito gympass";
   const autoCCDirection: "credito" | "debito" = "credito";
   const eligible =
@@ -369,7 +371,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
     "tenis de mesa (mensalista)",
     "terno de bola",
     "credito gympass",
-  ].includes(catNorm) || isMensalistaCredito || isEstorno;
+  ].includes(catNorm) || isStockCat || isMensalistaCredito || isEstorno;
   useEffect(() => {
     if (noTimeCourt && (form.court || form.startTime || form.endTime)) {
       setForm((f) => ({ ...f, court: "", startTime: "", endTime: "" }));

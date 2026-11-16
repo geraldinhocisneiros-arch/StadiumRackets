@@ -7,21 +7,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Package, Plus, Settings2 } from "lucide-react";
+import { Pencil, Plus, Settings2, Store, Trash2, PackagePlus } from "lucide-react";
 import { StockEntryDialog } from "@/components/StockEntryDialog";
+import { StockProductDialog, type LojinhaProduct } from "@/components/StockProductDialog";
+import { useConfirm } from "@/hooks/useConfirm";
+import { fmtBRL } from "@/lib/format";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 export const Route = createFileRoute("/estoque")({
-  head: () => ({ meta: [{ title: "Estoque — Stadium Rackets" }] }),
+  head: () => ({ meta: [{ title: "Lojinha — Stadium Rackets" }] }),
   component: EstoquePage,
 });
 
-interface StockItem {
-  id: string;
-  name: string;
-  current_quantity: number;
-}
+type StockItem = LojinhaProduct;
 
 interface StockMovement {
   id: string;
@@ -41,6 +40,9 @@ function EstoquePage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"entrada" | "ajuste">("entrada");
   const [loading, setLoading] = useState(true);
+  const [productOpen, setProductOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<StockItem | null>(null);
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,7 +56,10 @@ function EstoquePage() {
       supabase.from("profiles").select("id, full_name"),
     ]);
     if (itemsRes.error) toast.error(itemsRes.error.message);
-    else setItems((itemsRes.data ?? []) as StockItem[]);
+    else
+      setItems(
+        ((itemsRes.data ?? []) as Array<StockItem>).map((i) => ({ ...i, price: Number(i.price ?? 0) })),
+      );
     if (movsRes.error) toast.error(movsRes.error.message);
     else setMovements((movsRes.data ?? []) as StockMovement[]);
     if (profilesRes.data) {
@@ -78,29 +83,61 @@ function EstoquePage() {
 
   const itemName = (id: string) => items.find((i) => i.id === id)?.name ?? "—";
 
+  const openProduct = (p: StockItem | null) => {
+    setEditingProduct(p);
+    setProductOpen(true);
+  };
+
+  const deleteProduct = async (p: StockItem) => {
+    if (
+      !(await confirm(
+        `Excluir "${p.name}" da Lojinha? O histórico de movimentações deste produto também será apagado.`,
+      ))
+    )
+      return;
+    const { error } = await supabase.from("stock_items").delete().eq("id", p.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Produto excluído");
+    load();
+  };
+
   return (
     <AppLayout>
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Package className="h-6 w-6" /> Estoque
+              <Store className="h-6 w-6" /> Lojinha
             </h1>
             <p className="text-sm text-muted-foreground">
-              Controle de Terno de bola e Grip. Não entra nas finanças.
+              Produtos à venda no clube, com preço e quantidade em estoque.
             </p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => openDialog("ajuste")}>
               <Settings2 className="h-4 w-4 mr-2" /> Ajustar
             </Button>
-            <Button onClick={() => openDialog("entrada")}>
-              <Plus className="h-4 w-4 mr-2" /> Repor estoque
+            <Button variant="outline" onClick={() => openDialog("entrada")} disabled={items.length === 0}>
+              <PackagePlus className="h-4 w-4 mr-2" /> Repor estoque
+            </Button>
+            <Button onClick={() => openProduct(null)}>
+              <Plus className="h-4 w-4 mr-2" /> Novo produto
             </Button>
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        {!loading && items.length === 0 && (
+          <Card>
+            <CardContent className="py-8 text-center text-sm text-muted-foreground">
+              Nenhum produto cadastrado. Clique em <strong>Novo produto</strong> para começar.
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((item) => {
             const low = item.current_quantity <= 3;
             const todayStart = new Date();
@@ -117,7 +154,32 @@ function EstoquePage() {
             return (
               <Card key={item.id} className={low ? "border-warning" : ""}>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base">{item.name}</CardTitle>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <CardTitle className="text-base">{item.name}</CardTitle>
+                      <div className="text-sm font-semibold text-primary">{fmtBRL(item.price)}</div>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
+                        aria-label={`Editar ${item.name}`}
+                        onClick={() => openProduct(item)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-destructive"
+                        aria-label={`Excluir ${item.name}`}
+                        onClick={() => deleteProduct(item)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className={`text-4xl font-bold ${low ? "text-warning" : ""}`}>
@@ -206,6 +268,13 @@ function EstoquePage() {
         onOpenChange={setDialogOpen}
         mode={dialogMode}
         items={items}
+        onSaved={load}
+      />
+
+      <StockProductDialog
+        open={productOpen}
+        onOpenChange={setProductOpen}
+        product={editingProduct}
         onSaved={load}
       />
     </AppLayout>

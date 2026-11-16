@@ -10,6 +10,18 @@ export const normalizeCategoryName = (s: string | null | undefined): string =>
     .toLowerCase()
     .trim();
 
+// Categoria de venda de produto da Lojinha (dá baixa no estoque). Produtos
+// novos ficam ligados pela coluna stock_item_id; Terno de bola e Grip
+// continuam reconhecidos pelo nome.
+export const isStockCategory = (
+  cat: { name?: string | null; stock_item_id?: string | null } | null | undefined,
+): boolean => {
+  if (!cat) return false;
+  if (cat.stock_item_id) return true;
+  const n = normalizeCategoryName(cat.name);
+  return n === "grip" || n === "terno de bola";
+};
+
 export const isSaldoAnterior = (name: string | null | undefined): boolean =>
   normalizeCategoryName(name) === "saldo anterior";
 
