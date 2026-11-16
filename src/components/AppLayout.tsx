@@ -19,6 +19,7 @@ import {
   Sparkles,
   DollarSign,
   Package,
+  Store,
   FileText,
   GraduationCap,
   ArrowUp,
@@ -118,7 +119,7 @@ const NAV: NavItem[] = [
   { to: "/relatorios", label: "Relatórios", icon: BarChart3, rolesAllowed: ["diretoria"] },
   { to: "/inteligencia", label: "Inteligência", icon: Lightbulb, rolesAllowed: ["diretoria"] },
   { to: "/usuarios", label: "Usuários", icon: UserCog, pageKey: "usuarios" },
-  { to: "/estoque", label: "Estoque", icon: Package, pageKey: "estoque" },
+  { to: "/estoque", label: "Lojinha", icon: Store, pageKey: "estoque" },
   { to: "/limpeza", label: "Limpeza", icon: Sparkles, rolesAllowed: ["diretoria", "limpeza"] },
   {
     to: "/professores",
@@ -131,6 +132,12 @@ const NAV: NavItem[] = [
     label: "Relatório professor",
     icon: GraduationCap,
     rolesAllowed: ["diretoria", "recepcionista"],
+  },
+  {
+    to: "/comissao-johny",
+    label: "Comissão Johny",
+    icon: GraduationCap,
+    rolesAllowed: ["admin", "diretoria"],
   },
   {
     to: "/professores/vinculos",
@@ -188,6 +195,7 @@ const NAV_GROUPS: Array<{
     children: [
       "/professores",
       "/professores/relatorio",
+      "/comissao-johny",
       "/professores/vinculos",
       "/vinculos-professor",
       "/trocas-cliente",

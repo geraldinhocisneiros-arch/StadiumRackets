@@ -3,7 +3,7 @@ import { getRequest } from "@tanstack/react-start/server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { calcOnlinePrice, type PriceBand } from "@/lib/pricing";
 import { getServerSecret } from "@/lib/server-env";
-import { normalizeCategoryName } from "@/lib/category";
+import { normalizeCategoryName, isAvulsoCategoryName } from "@/lib/category";
 
 interface CreatePreferenceInput {
   bookingId: string;
@@ -81,7 +81,7 @@ export const createCourtBookingPaymentPreference = createServerFn({ method: "POS
       const { data: cats } = await supabaseAdmin.from("client_categories").select("id, name");
       avulsoCategoryId =
         ((cats ?? []) as Array<{ id: string; name: string }>).find(
-          (c) => normalizeCategoryName(c.name) === "avulso",
+          (c) => isAvulsoCategoryName(c.name),
         )?.id ?? null;
     }
 

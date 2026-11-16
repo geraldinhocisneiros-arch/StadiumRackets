@@ -32,7 +32,7 @@ import { format, startOfMonth, endOfMonth, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { logAction } from "@/lib/audit";
-import { isSaldoAnterior } from "@/lib/category";
+import { isSaldoAnterior, isStockCategory, isAvulsoCategoryName } from "@/lib/category";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { ClientDialog } from "@/routes/clientes";
 import { useUrlState } from "@/hooks/useUrlState";
@@ -77,6 +77,7 @@ interface CategoryRow {
   id: string;
   name: string;
   default_amount: number;
+  stock_item_id?: string | null;
 }
 interface PaymentRow {
   id: string;
@@ -108,7 +109,7 @@ const methodLabel = (m?: string | null) =>
 
 
 
-import { COURTS, courtLabel, courtShort } from "@/lib/court-map";
+import { COURTS, courtLabel, courtShort, isRankingCategoryName } from "@/lib/court-map";
 const NEW_CLIENT_VALUE = "__new__";
 const NONE_VALUE = "__none__";
 
@@ -370,7 +371,7 @@ function CaixaPage() {
           "id, full_name, custom_amount, category_id, default_discount_percent, active, client_categories(name, default_amount)",
           { build: (q) => q.eq("active", true) },
         ),
-        supabase.from("client_categories").select("id, name, default_amount").eq("active", true).order("name"),
+        supabase.from("client_categories").select("id, name, default_amount, stock_item_id").eq("active", true).order("name"),
         supabase
           .from("price_table")
           .select("id, categories, weekday, start_time, end_time, price_per_hour, courts, starts_on, ends_on"),
@@ -615,10 +616,9 @@ function CaixaPage() {
     const c = clients.find((c) => c.id === form.clientIds[0]);
     if (!c) return;
     const v = c.custom_amount ?? c.client_categories?.default_amount ?? 0;
-    // Mensalista sem desconto próprio cadastrado usa 10% por padrão — mesma
-    // regra do formulário de pagamento em Finanças (NewPaymentDialog.tsx).
-    const clientDiscount =
-      c.default_discount_percent != null ? Number(c.default_discount_percent) : 10;
+    // Stadium: sem desconto padrão de mensalista — só o desconto cadastrado
+    // no próprio cliente (0 = valor cheio).
+    const clientDiscount = Number(c.default_discount_percent) || 0;
     // Só aplica desconto se a categoria SELECIONADA no form for mensalista
     // E não for crédito em C/C (creditar na conta corrente não tem desconto).
     // Se o usuário digitou o valor manualmente, assume que já é o valor final
@@ -641,7 +641,7 @@ function CaixaPage() {
   useEffect(() => {
     if (amountManuallyEdited) return;
     const catNorm = normalizeCategoryName(categories.find((c) => c.id === form.categoryId)?.name);
-    const isAvulso = catNorm === "avulso";
+    const isAvulso = isAvulsoCategoryName(catNorm);
     if (form.accountDirection !== "debito" && !isAvulso) return;
     if (!form.startTime || !form.endTime || !form.paidAt) return;
     const wd = weekdayFromYmd(form.paidAt);
@@ -670,7 +670,7 @@ function CaixaPage() {
   useEffect(() => {
     if (editAmountManuallyEdited) return;
     const catNorm = normalizeCategoryName(categories.find((c) => c.id === editForm.categoryId)?.name);
-    const isAvulso = catNorm === "avulso";
+    const isAvulso = isAvulsoCategoryName(catNorm);
     if (editForm.accountDirection !== "debito" && !isAvulso) return;
     if (!editForm.startTime || !editForm.endTime || !editForm.paidAt) return;
     const wd = weekdayFromYmd(editForm.paidAt);
@@ -712,8 +712,8 @@ function CaixaPage() {
     const isEstorno = catNorm === "estorno";
     const isGympass = catNorm === "credito gympass";
     const isAutoCCPayload = isGympass;
-    const isStockCat = catNorm === "grip" || catNorm === "terno de bola";
-    const isRanking = catNorm === "ranking masculino" || catNorm === "ranking feminino";
+    const isStockCat = isStockCategory(categories.find((c) => c.id === f.categoryId));
+    const isRanking = isRankingCategoryName(catNorm);
 
     const rawAmount = overrideAmount !== undefined ? overrideAmount : Number(f.amount) || 0;
     const pct = Math.min(Math.max(Number(f.discountPercent) || 0, 0), 100);
@@ -798,7 +798,7 @@ function CaixaPage() {
       toast.error("Mensalista com Crédito exige uma forma de pagamento.");
       return;
     }
-    if ((submitCatNorm === "ranking masculino" || submitCatNorm === "ranking feminino") && (!form.court || !form.startTime)) {
+    if ((isRankingCategoryName(submitCatNorm)) && (!form.court || !form.startTime)) {
       toast.error("Para Ranking, informe a quadra e o horário de início.");
       return;
     }
@@ -1139,7 +1139,7 @@ function CaixaPage() {
       toast.error("Mensalista com Crédito exige uma forma de pagamento.");
       return;
     }
-    if ((editCatNorm === "ranking masculino" || editCatNorm === "ranking feminino") && (!editForm.court || !editForm.startTime)) {
+    if ((isRankingCategoryName(editCatNorm)) && (!editForm.court || !editForm.startTime)) {
       toast.error("Para Ranking, informe a quadra e o horário de início.");
       return;
     }
@@ -1317,7 +1317,7 @@ function CaixaPage() {
     const isMensalistaDebito = fCatNorm === "mensalista" && f.accountDirection === "debito";
     const isMensalistaCredito = fCatNorm === "mensalista" && f.accountDirection === "credito";
     const isInscricaoRanking = fCatNorm === "inscricao ranking masculino";
-    const isStockCat = fCatNorm === "grip" || fCatNorm === "terno de bola";
+    const isStockCat = isStockCategory(fCat);
     const noTimeCourt = [
       "grip",
       "inscricao ranking masculino",
@@ -1325,7 +1325,7 @@ function CaixaPage() {
       "tenis de mesa (mensalista)",
       "terno de bola",
       "credito gympass",
-    ].includes(fCatNorm) || isMensalistaCredito || isEstorno;
+    ].includes(fCatNorm) || isStockCat || isMensalistaCredito || isEstorno;
     return (
       <div className="space-y-4">
         {isCreate ? (
@@ -1789,7 +1789,7 @@ function CaixaPage() {
         )}
 
         <div className={`space-y-2 ${noTimeCourt ? "opacity-50" : ""}`}>
-          <Label>Quadra {(fCatNorm === "ranking masculino" || fCatNorm === "ranking feminino" || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
+          <Label>Quadra {(isRankingCategoryName(fCatNorm) || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
           <div className="flex gap-2">
             <Select
               key={f.court === "" ? "empty" : "set"}
@@ -1824,7 +1824,7 @@ function CaixaPage() {
 
         <div className="grid grid-cols-2 gap-4">
           <div className={`space-y-2 ${noTimeCourt ? "opacity-50" : ""}`}>
-            <Label>Horário de início {(fCatNorm === "ranking masculino" || fCatNorm === "ranking feminino" || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
+            <Label>Horário de início {(isRankingCategoryName(fCatNorm) || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
             <Input type="time" value={isEstorno ? "" : f.startTime} onChange={(e) => update({ startTime: e.target.value })} disabled={noTimeCourt} />
           </div>
           <div className={`space-y-2 ${noTimeCourt ? "opacity-50" : ""}`}>
@@ -1884,7 +1884,7 @@ function CaixaPage() {
           const hasClient = isCreate ? f.clientIds.length > 0 : !!f.clientId && f.clientId !== NEW_CLIENT_VALUE;
           const eligible =
             hasClient &&
-            (catNorm === "mensalista" || catNorm === "debito avulso" || catNorm === "saldo anterior" || catNorm === "credito gympass" || catNorm === "pendencia avulsa" || catNorm === "energia (luz)" || catNorm === "ranking masculino" || catNorm === "ranking feminino" || isEstornoAccount);
+            (catNorm === "mensalista" || catNorm === "debito avulso" || catNorm === "saldo anterior" || catNorm === "credito gympass" || catNorm === "pendencia avulsa" || catNorm === "energia (luz)" || isRankingCategoryName(catNorm) || isEstornoAccount);
           return (
             <div className="space-y-2">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
