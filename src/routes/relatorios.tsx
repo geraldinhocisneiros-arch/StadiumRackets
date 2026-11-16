@@ -13,7 +13,7 @@ import { fmtBRL, fmtDate, monthStartISO, monthEndISO, dayStartISO, dayEndExclusi
 import { Printer } from "lucide-react";
 import { useUrlState } from "@/hooks/useUrlState";
 import { toast } from "sonner";
-import { isSaldoAnterior, isNonRevenueCategory } from "@/lib/category";
+import { isSaldoAnterior, isNonRevenueCategory, registerLojinhaCategories } from "@/lib/category";
 import { fetchAll, runWithConcurrency } from "@/lib/fetchAll";
 import {
   ResponsiveContainer,
@@ -120,9 +120,10 @@ function RelatoriosPage() {
         .select("id", { count: "exact", head: true })
         .gte("created_at", startISO)
         .lt("created_at", endISO),
-      supabase.from("client_categories").select("id, name"),
+      supabase.from("client_categories").select("id, name, stock_item_id"),
     ]);
 
+    registerLojinhaCategories(catsRes.data);
     const catMap = new Map<string, string>();
     (catsRes.data ?? []).forEach((c: any) => catMap.set(c.id, c.name));
     setCategoryNameMap(catMap);
@@ -218,7 +219,8 @@ function RelatoriosPage() {
       if (arr.length < pageSize) break;
       offset += pageSize;
     }
-    const { data: cats } = await supabase.from("client_categories").select("id, name");
+    const { data: cats } = await supabase.from("client_categories").select("id, name, stock_item_id");
+    registerLojinhaCategories(cats);
     const catMap = new Map<string, string>();
     (cats ?? []).forEach((c: any) => catMap.set(c.id, c.name));
     const resolveCat = (p: any): string => {
