@@ -34,6 +34,7 @@ import {
   ChevronDown,
   Settings,
   Repeat,
+  MessageCircle,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "@/hooks/useAuth";
@@ -105,6 +106,12 @@ const NAV: NavItem[] = [
     to: "/clientes/limite-debito",
     label: "Exceções",
     icon: ShieldCheck,
+    rolesAllowed: ["admin", "diretoria", "recepcionista"],
+  },
+  {
+    to: "/whatsapp",
+    label: "Envio WhatsApp",
+    icon: MessageCircle,
     rolesAllowed: ["admin", "diretoria", "recepcionista"],
   },
   { to: "/clientes", label: "Clientes", icon: Users, pageKey: "clientes" },

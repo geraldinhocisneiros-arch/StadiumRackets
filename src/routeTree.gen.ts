@@ -41,6 +41,7 @@ import { Route as TrustRouteImport } from './routes/trust'
 import { Route as UsuariosRouteImport } from './routes/usuarios'
 import { Route as VagasFixasRouteImport } from './routes/vagas-fixas'
 import { Route as VinculosProfessorRouteImport } from './routes/vinculos-professor'
+import { Route as WhatsappRouteImport } from './routes/whatsapp'
 import { Route as ClientesClientIdRouteImport } from './routes/clientes.$clientId'
 import { Route as ClientesLimiteDebitoRouteImport } from './routes/clientes.limite-debito'
 import { Route as MapaTvRouteImport } from './routes/mapa.tv'
@@ -219,6 +220,11 @@ const VinculosProfessorRoute = VinculosProfessorRouteImport.update({
   path: '/vinculos-professor',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WhatsappRoute = WhatsappRouteImport.update({
+  id: '/whatsapp',
+  path: '/whatsapp',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ClientesClientIdRoute = ClientesClientIdRouteImport.update({
   id: '/$clientId',
   path: '/$clientId',
@@ -340,6 +346,7 @@ export interface FileRoutesByFullPath {
   '/usuarios': typeof UsuariosRoute
   '/vagas-fixas': typeof VagasFixasRoute
   '/vinculos-professor': typeof VinculosProfessorRoute
+  '/whatsapp': typeof WhatsappRoute
   '/clientes/$clientId': typeof ClientesClientIdRoute
   '/clientes/limite-debito': typeof ClientesLimiteDebitoRoute
   '/mapa/tv': typeof MapaTvRoute
@@ -390,6 +397,7 @@ export interface FileRoutesByTo {
   '/usuarios': typeof UsuariosRoute
   '/vagas-fixas': typeof VagasFixasRoute
   '/vinculos-professor': typeof VinculosProfessorRoute
+  '/whatsapp': typeof WhatsappRoute
   '/clientes/$clientId': typeof ClientesClientIdRoute
   '/clientes/limite-debito': typeof ClientesLimiteDebitoRoute
   '/mapa/tv': typeof MapaTvRoute
@@ -442,6 +450,7 @@ export interface FileRoutesById {
   '/usuarios': typeof UsuariosRoute
   '/vagas-fixas': typeof VagasFixasRoute
   '/vinculos-professor': typeof VinculosProfessorRoute
+  '/whatsapp': typeof WhatsappRoute
   '/clientes/$clientId': typeof ClientesClientIdRoute
   '/clientes/limite-debito': typeof ClientesLimiteDebitoRoute
   '/mapa/tv': typeof MapaTvRoute
@@ -495,6 +504,7 @@ export interface FileRouteTypes {
     | '/usuarios'
     | '/vagas-fixas'
     | '/vinculos-professor'
+    | '/whatsapp'
     | '/clientes/$clientId'
     | '/clientes/limite-debito'
     | '/mapa/tv'
@@ -545,6 +555,7 @@ export interface FileRouteTypes {
     | '/usuarios'
     | '/vagas-fixas'
     | '/vinculos-professor'
+    | '/whatsapp'
     | '/clientes/$clientId'
     | '/clientes/limite-debito'
     | '/mapa/tv'
@@ -596,6 +607,7 @@ export interface FileRouteTypes {
     | '/usuarios'
     | '/vagas-fixas'
     | '/vinculos-professor'
+    | '/whatsapp'
     | '/clientes/$clientId'
     | '/clientes/limite-debito'
     | '/mapa/tv'
@@ -648,6 +660,7 @@ export interface RootRouteChildren {
   UsuariosRoute: typeof UsuariosRoute
   VagasFixasRoute: typeof VagasFixasRoute
   VinculosProfessorRoute: typeof VinculosProfessorRoute
+  WhatsappRoute: typeof WhatsappRoute
   ProfessorIndexRoute: typeof ProfessorIndexRoute
   ProfessorCadastroTokenRoute: typeof ProfessorCadastroTokenRoute
   ApiPublicHooksBookingConfirmationRemindersRoute: typeof ApiPublicHooksBookingConfirmationRemindersRoute
@@ -880,6 +893,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VinculosProfessorRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/whatsapp': {
+      id: '/whatsapp'
+      path: '/whatsapp'
+      fullPath: '/whatsapp'
+      preLoaderRoute: typeof WhatsappRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/clientes/$clientId': {
       id: '/clientes/$clientId'
       path: '/$clientId'
@@ -1098,6 +1118,7 @@ const rootRouteChildren: RootRouteChildren = {
   UsuariosRoute: UsuariosRoute,
   VagasFixasRoute: VagasFixasRoute,
   VinculosProfessorRoute: VinculosProfessorRoute,
+  WhatsappRoute: WhatsappRoute,
   ProfessorIndexRoute: ProfessorIndexRoute,
   ProfessorCadastroTokenRoute: ProfessorCadastroTokenRoute,
   ApiPublicHooksBookingConfirmationRemindersRoute:
