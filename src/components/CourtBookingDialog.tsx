@@ -67,7 +67,7 @@ import {
 import { fetchUnmovedFixedGroup, moveBookingOntoFixed, moveFixedToday } from "@/lib/fixed-swap";
 import { ClientCombobox, type ClientOption } from "@/components/ClientCombobox";
 import { calcPrice, type PriceBand } from "@/lib/pricing";
-import { effectiveClientDiscount, normalizeCategoryName } from "@/lib/category";
+import { effectiveClientDiscount, normalizeCategoryName, isAvulsoCategoryName } from "@/lib/category";
 import {
   COURT_MAP_BOOKING_SELECT,
   toCourtMapBooking,
@@ -639,7 +639,7 @@ export function CourtBookingDialog({
     }
     const norm = normalizeCategoryName(cat?.name ?? "");
     const isMens = norm === "mensalista";
-    const isAvulso = norm === "avulso";
+    const isAvulso = isAvulsoCategoryName(norm);
     // Demais categorias (ex.: Funcionário) nunca
     // têm valor auto-preenchido — limpa para não deixar um preço de uma
     // categoria anterior "grudado" ao trocar a categoria.
@@ -1053,7 +1053,7 @@ export function CourtBookingDialog({
       const cat = categories.find((c) => c.id === categoryId);
       const norm = normalizeCategoryName(cat?.name ?? "");
       const isMens = norm === "mensalista";
-      const isAvulso = norm === "avulso";
+      const isAvulso = isAvulsoCategoryName(norm);
       if ((isMens || isAvulso) && !isRankingCategoryName(cat?.name ?? null)) {
         const calc = calcPrice({
           bands: priceBands,
@@ -1953,7 +1953,7 @@ export function CourtBookingDialog({
       const cat = categories.find((c) => c.id === categoryId);
       const norm = normalizeCategoryName(cat?.name ?? "");
       const isMens = norm === "mensalista";
-      const isAvulso = norm === "avulso";
+      const isAvulso = isAvulsoCategoryName(norm);
       if ((isMens || isAvulso) && !isRankingCategoryName(cat?.name ?? null)) {
         const calc = calcPrice({
           bands: priceBands,

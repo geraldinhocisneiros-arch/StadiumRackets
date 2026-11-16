@@ -30,7 +30,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { toast } from "sonner";
-import { isStockCategory } from "@/lib/category";
+import { isStockCategory, isAvulsoCategoryName } from "@/lib/category";
 import { Loader2, Check, ChevronsUpDown, X, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logAction } from "@/lib/audit";
@@ -785,7 +785,7 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
                     <strong>Saldo anterior</strong> ou <strong>crédito GYMPASS</strong>.
                   </p>
                 )}
-                {catNorm === "avulso" && form.clientId && !form.received && (
+                {isAvulsoCategoryName(catNorm) && form.clientId && !form.received && (
                   <p className="text-xs text-amber-600 dark:text-amber-400">
                     Será lançado como débito na conta corrente do cliente até a quitação.
                   </p>

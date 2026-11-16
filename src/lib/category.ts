@@ -22,6 +22,14 @@ export const isStockCategory = (
   return n === "grip" || n === "terno de bola";
 };
 
+// Categoria de "balcão" (cliente que aluga a quadra avulsa, sem plano). No
+// Squash ela se chamava "Avulso"; na Stadium é "Aluguel quadra". É a base do
+// preço mostrado no mapa, do valor automático no caixa e do preço online.
+export const isAvulsoCategoryName = (name: string | null | undefined): boolean => {
+  const n = normalizeCategoryName(name);
+  return n === "avulso" || n === "aluguel quadra" || n === "aluguel de quadra";
+};
+
 export const isSaldoAnterior = (name: string | null | undefined): boolean =>
   normalizeCategoryName(name) === "saldo anterior";
 

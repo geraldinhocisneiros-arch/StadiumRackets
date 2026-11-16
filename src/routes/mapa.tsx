@@ -2,7 +2,7 @@ import { createFileRoute, useLocation, useNavigate } from "@tanstack/react-route
 import { useEffect, useState, useCallback, useMemo, useRef, useImperativeHandle, forwardRef } from "react";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
-import { normalizeCategoryName } from "@/lib/category";
+import { normalizeCategoryName, isAvulsoCategoryName } from "@/lib/category";
 import { NotificationsProvider } from "@/hooks/useNotifications";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -512,7 +512,7 @@ function MapaPage() {
             .trim() === "mensalista",
       );
       setMensalistaCategoryId(found?.id ?? null);
-      setAvulsoCategoryId(catsList.find((c) => normalizeCategoryName(c.name) === "avulso")?.id ?? null);
+      setAvulsoCategoryId(catsList.find((c) => isAvulsoCategoryName(c.name))?.id ?? null);
     }
 
     // Autor: quem marcou / cancelou.
