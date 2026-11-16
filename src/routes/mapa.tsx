@@ -1132,6 +1132,10 @@ function MapaPage() {
                 onCellClick={handleCell}
                 highlightAvailability
                 priceBands={priceBands}
+                // Preço exibido nos horários livres: o da categoria Avulso
+                // (preço "de balcão"). Sem isso, faixas cadastradas só para
+                // categorias (Avulso, Mensalista…) não apareciam no mapa.
+                priceCategoryId={avulsoCategoryId}
                 date={date}
                 onlinePromoHint={canManageAvailability}
                 onlinePromoCategoryId={avulsoCategoryId}

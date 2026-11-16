@@ -109,7 +109,7 @@ const methodLabel = (m?: string | null) =>
 
 
 
-import { COURTS, courtLabel, courtShort } from "@/lib/court-map";
+import { COURTS, courtLabel, courtShort, isRankingCategoryName } from "@/lib/court-map";
 const NEW_CLIENT_VALUE = "__new__";
 const NONE_VALUE = "__none__";
 
@@ -714,7 +714,7 @@ function CaixaPage() {
     const isGympass = catNorm === "credito gympass";
     const isAutoCCPayload = isGympass;
     const isStockCat = isStockCategory(categories.find((c) => c.id === f.categoryId));
-    const isRanking = catNorm === "ranking masculino" || catNorm === "ranking feminino";
+    const isRanking = isRankingCategoryName(catNorm);
 
     const rawAmount = overrideAmount !== undefined ? overrideAmount : Number(f.amount) || 0;
     const pct = Math.min(Math.max(Number(f.discountPercent) || 0, 0), 100);
@@ -799,7 +799,7 @@ function CaixaPage() {
       toast.error("Mensalista com Crédito exige uma forma de pagamento.");
       return;
     }
-    if ((submitCatNorm === "ranking masculino" || submitCatNorm === "ranking feminino") && (!form.court || !form.startTime)) {
+    if ((isRankingCategoryName(submitCatNorm)) && (!form.court || !form.startTime)) {
       toast.error("Para Ranking, informe a quadra e o horário de início.");
       return;
     }
@@ -1140,7 +1140,7 @@ function CaixaPage() {
       toast.error("Mensalista com Crédito exige uma forma de pagamento.");
       return;
     }
-    if ((editCatNorm === "ranking masculino" || editCatNorm === "ranking feminino") && (!editForm.court || !editForm.startTime)) {
+    if ((isRankingCategoryName(editCatNorm)) && (!editForm.court || !editForm.startTime)) {
       toast.error("Para Ranking, informe a quadra e o horário de início.");
       return;
     }
@@ -1790,7 +1790,7 @@ function CaixaPage() {
         )}
 
         <div className={`space-y-2 ${noTimeCourt ? "opacity-50" : ""}`}>
-          <Label>Quadra {(fCatNorm === "ranking masculino" || fCatNorm === "ranking feminino" || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
+          <Label>Quadra {(isRankingCategoryName(fCatNorm) || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
           <div className="flex gap-2">
             <Select
               key={f.court === "" ? "empty" : "set"}
@@ -1825,7 +1825,7 @@ function CaixaPage() {
 
         <div className="grid grid-cols-2 gap-4">
           <div className={`space-y-2 ${noTimeCourt ? "opacity-50" : ""}`}>
-            <Label>Horário de início {(fCatNorm === "ranking masculino" || fCatNorm === "ranking feminino" || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
+            <Label>Horário de início {(isRankingCategoryName(fCatNorm) || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
             <Input type="time" value={isEstorno ? "" : f.startTime} onChange={(e) => update({ startTime: e.target.value })} disabled={noTimeCourt} />
           </div>
           <div className={`space-y-2 ${noTimeCourt ? "opacity-50" : ""}`}>
@@ -1885,7 +1885,7 @@ function CaixaPage() {
           const hasClient = isCreate ? f.clientIds.length > 0 : !!f.clientId && f.clientId !== NEW_CLIENT_VALUE;
           const eligible =
             hasClient &&
-            (catNorm === "mensalista" || catNorm === "debito avulso" || catNorm === "saldo anterior" || catNorm === "credito gympass" || catNorm === "pendencia avulsa" || catNorm === "energia (luz)" || catNorm === "ranking masculino" || catNorm === "ranking feminino" || isEstornoAccount);
+            (catNorm === "mensalista" || catNorm === "debito avulso" || catNorm === "saldo anterior" || catNorm === "credito gympass" || catNorm === "pendencia avulsa" || catNorm === "energia (luz)" || isRankingCategoryName(catNorm) || isEstornoAccount);
           return (
             <div className="space-y-2">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

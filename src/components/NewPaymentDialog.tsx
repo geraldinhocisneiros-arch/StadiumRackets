@@ -104,7 +104,7 @@ const computeFinalAmount = (amount: string, discountPercent: string) => {
 };
 
 
-import { COURTS, courtLabel } from "@/lib/court-map";
+import { COURTS, courtLabel, isRankingCategoryName } from "@/lib/court-map";
 const NONE_VALUE = "__none__";
 
 export interface NewPaymentDialogProps {
@@ -252,7 +252,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
       toast.error("Mensalista com Crédito exige uma forma de pagamento.");
       return;
     }
-    if ((catSelNorm === "ranking masculino" || catSelNorm === "ranking feminino") && (!form.court || !form.startTime)) {
+    if ((isRankingCategoryName(catSelNorm)) && (!form.court || !form.startTime)) {
       toast.error("Para Ranking, informe a quadra e o horário de início.");
       return;
     }
@@ -302,7 +302,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
       end_time: form.endTime || null,
       court: form.court ? Number(form.court) : null,
       received:
-        catSelNorm === "ranking masculino" || catSelNorm === "ranking feminino"
+        isRankingCategoryName(catSelNorm)
           ? form.received
           : finalAmount === 0
             ? true
@@ -359,6 +359,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
       catNorm === "pendencia avulsa" ||
       catNorm === "ranking masculino" ||
       catNorm === "ranking feminino" ||
+      catNorm === "ranking dupla" ||
       isEstorno);
   const isCommissionable = catNorm === "mensalista";
   const isMensalistaDebito = catNorm === "mensalista" && form.accountDirection === "debito";
@@ -731,7 +732,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
             )}
 
             <div className={`space-y-2 ${noTimeCourt ? "opacity-50" : ""}`}>
-              <Label>Quadra {(catNorm === "ranking masculino" || catNorm === "ranking feminino" || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
+              <Label>Quadra {(isRankingCategoryName(catNorm) || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
               <div className="flex gap-2">
                 <Select
                   key={form.court === "" ? "empty" : "set"}
@@ -766,7 +767,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
 
             <div className="grid grid-cols-2 gap-4">
               <div className={`space-y-2 ${noTimeCourt ? "opacity-50" : ""}`}>
-                <Label>Horário de início {(catNorm === "ranking masculino" || catNorm === "ranking feminino" || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
+                <Label>Horário de início {(isRankingCategoryName(catNorm) || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
                 <Input
                   type="time"
                   value={form.startTime}

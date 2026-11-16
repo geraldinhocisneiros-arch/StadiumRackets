@@ -82,6 +82,7 @@ type Kind = "uso" | "outro_debito" | "estorno" | "credito" | "transferencia" | "
 const NOT_RENTAL_CATEGORIES = [
   "ranking masculino",
   "ranking feminino",
+  "ranking dupla",
   "energia (luz)",
   "saldo anterior",
 ];
