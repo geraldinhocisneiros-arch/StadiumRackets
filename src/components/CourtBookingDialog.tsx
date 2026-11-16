@@ -266,6 +266,10 @@ export function CourtBookingDialog({
   // Quadra dividida + débito em conta corrente: divide o valor da quadra em
   // partes iguais e debita a parte de cada jogador na conta dele.
   const [splitDebit, setSplitDebit] = useState<boolean>(true);
+  // RKG Dupla na tela de detalhes: "igual" divide o valor total entre os 4
+  // jogadores; "individual" deixa digitar o valor de cada jogador.
+  const [duplaPayMode, setDuplaPayMode] = useState<"igual" | "individual">("igual");
+  const [duplaAmounts, setDuplaAmounts] = useState<Record<string, string>>({});
   // Lançamento do segundo jogador (ex.: partida de ranking em que cada
   // jogador paga de um jeito diferente — um na hora, outro na pasta).
   const [wantsPayment2, setWantsPayment2] = useState<boolean>(false);
@@ -2137,11 +2141,113 @@ export function CourtBookingDialog({
   // Bloqueio de manutenção: não é uma reserva de verdade — sem cobrança,
   // sem participantes.
   const isManutencao = isManutencaoName(existing?.category_name ?? null);
+  const viewIsDupla = isRankingDuplaName(
+    existing?.category_name ??
+      categories.find((c) => c.id === (existing?.category_id ?? ""))?.name ??
+      null,
+  );
+  const viewPlayers: { id: string; name: string }[] = (() => {
+    if (!existing) return [];
+    const list: { id: string; name: string }[] = [];
+    if (existing.client_id) {
+      list.push({ id: existing.client_id, name: existing.clients?.full_name ?? "Cliente" });
+    }
+    for (const p of existingParticipants) {
+      if (p.client_id && !list.some((x) => x.id === p.client_id)) {
+        list.push({ id: p.client_id, name: p.full_name ?? "Cliente" });
+      }
+    }
+    return list;
+  })();
+  const parseMoneyInput = (v: string | undefined) => {
+    const n = Number((v ?? "").replace(",", "."));
+    return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0;
+  };
+
+  // RKG Dupla: lança no caixa para os jogadores escolhidos — valor total
+  // dividido igualmente entre todos, ou o valor digitado de cada um.
+  const submitDuplaPayment = async () => {
+    if (!existing) return;
+    if (!categoryId) {
+      toast.error("Selecione a categoria para gerar o lançamento no caixa.");
+      return;
+    }
+    let entries: { id: string; amount: number }[];
+    if (duplaPayMode === "igual") {
+      const total = parseMoneyInput(payAmount);
+      if (total <= 0) {
+        toast.error("Informe o valor total a dividir.");
+        return;
+      }
+      const parts = splitEvenly(total, viewPlayers.length);
+      entries = viewPlayers.map((p, i) => ({ id: p.id, amount: parts[i]! }));
+    } else {
+      entries = viewPlayers
+        .map((p) => ({ id: p.id, amount: parseMoneyInput(duplaAmounts[p.id]) }))
+        .filter((e) => e.amount > 0);
+      if (entries.length === 0) {
+        toast.error("Digite o valor de pelo menos um jogador.");
+        return;
+      }
+    }
+    setSubmitting(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    const paidAtIso = new Date().toISOString();
+    const baseNotes = `Auto (mapa) · RKG Dupla · ${courtShort(existing.court)} · ${existing.start_time.slice(0, 5)}–${existing.end_time.slice(0, 5)}`;
+    const { error } = await supabase.from("payments").insert(
+      entries.map((e) => ({
+        client_id: e.id,
+        category_id: categoryId,
+        amount: e.amount,
+        method: (payMethod || "outro") as never,
+        paid_at: paidAtIso,
+        start_time: existing.start_time,
+        end_time: existing.end_time,
+        court: existing.court,
+        received: payReceived,
+        to_account: payDirection !== "",
+        account_direction: payDirection || null,
+        notes: duplaPayMode === "igual" ? `${baseNotes} · dividido em ${entries.length}` : baseNotes,
+        recorded_by: user?.id ?? null,
+        booking_id: existing.id,
+      })),
+    );
+    setSubmitting(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    entries.forEach((e) => {
+      void offerWhatsAppPaymentNotification({
+        clientId: e.id,
+        amount: e.amount,
+        accountDirection: payDirection || null,
+        paidAt: paidAtIso,
+        startTime: existing.start_time,
+      });
+    });
+    const nameOf = (id: string) => viewPlayers.find((p) => p.id === id)?.name ?? "?";
+    toast.success(
+      `Lançado: ${entries.map((e) => `${nameOf(e.id)} ${fmtBRL(e.amount)}`).join(" · ")}`,
+    );
+    setViewWantsPayment(false);
+    setPayAmount("");
+    setPayMethod("");
+    setPayDirection("");
+    setPayReceived(false);
+    setDuplaAmounts({});
+    onSaved();
+    onOpenChange(false);
+  };
 
   // Lançar pagamento direto na tela de detalhes, sem precisar entrar em
   // "Editar locação".
   const submitViewPayment = async () => {
     if (!existing) return;
+    if (viewIsDupla && !viewPendingPaymentId && viewPlayers.length > 1) {
+      await submitDuplaPayment();
+      return;
+    }
     const amountNum = Number(payAmount.replace(",", ".")) || 0;
     if (amountNum < 0) {
       toast.error("Valor do lançamento não pode ser negativo.");
@@ -3233,7 +3339,60 @@ export function CourtBookingDialog({
                         </Select>
                       </div>
                     )}
-                    {existingParticipants.some((p) => p.client_id !== existing.client_id) && (
+                    {viewIsDupla && !viewPendingPaymentId && viewPlayers.length > 1 && (
+                      <div className="space-y-2">
+                        <div className="inline-flex rounded-md border p-0.5 text-sm">
+                          <button
+                            type="button"
+                            onClick={() => setDuplaPayMode("igual")}
+                            className={`rounded px-3 py-1.5 ${duplaPayMode === "igual" ? "bg-primary text-primary-foreground" : ""}`}
+                          >
+                            Dividir igualmente entre todos
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDuplaPayMode("individual")}
+                            className={`rounded px-3 py-1.5 ${duplaPayMode === "individual" ? "bg-primary text-primary-foreground" : ""}`}
+                          >
+                            Valor por jogador
+                          </button>
+                        </div>
+                        {duplaPayMode === "igual" ? (
+                          <p className="text-xs text-muted-foreground">
+                            Digite o valor total: cada um dos {viewPlayers.length} jogadores recebe a sua parte
+                            {parseMoneyInput(payAmount) > 0 &&
+                              ` (${splitEvenly(parseMoneyInput(payAmount), viewPlayers.length)
+                                .map(fmtBRL)
+                                .join(" · ")})`}
+                            .
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground">
+                              Digite o valor de quem vai pagar. Jogador sem valor não é lançado.
+                            </p>
+                            {viewPlayers.map((p) => (
+                              <div key={p.id} className="flex items-center gap-2">
+                                <span className="flex-1 truncate text-sm">{p.name}</span>
+                                <Input
+                                  className="w-32"
+                                  type="number"
+                                  inputMode="decimal"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="0,00"
+                                  value={duplaAmounts[p.id] ?? ""}
+                                  onChange={(e) =>
+                                    setDuplaAmounts((prev) => ({ ...prev, [p.id]: e.target.value }))
+                                  }
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {!viewIsDupla && existingParticipants.some((p) => p.client_id !== existing.client_id) && (
                       <div className="space-y-1">
                         <Label className="text-xs">Cobrar de</Label>
                         <Select
@@ -3261,8 +3420,11 @@ export function CourtBookingDialog({
                       </div>
                     )}
                     <div className="grid grid-cols-2 gap-3">
+                      {!(viewIsDupla && !viewPendingPaymentId && viewPlayers.length > 1 && duplaPayMode === "individual") && (
                       <div className="space-y-1">
-                        <Label className="text-xs">Valor (R$)</Label>
+                        <Label className="text-xs">
+                          {viewIsDupla && !viewPendingPaymentId && viewPlayers.length > 1 ? "Valor total (R$)" : "Valor (R$)"}
+                        </Label>
                         <Input
                           type="number"
                           inputMode="decimal"
@@ -3273,6 +3435,7 @@ export function CourtBookingDialog({
                           placeholder="0,00"
                         />
                       </div>
+                      )}
                       <div className="space-y-1">
                         <Label className="text-xs">Forma de pagamento</Label>
                         <Select
@@ -3317,6 +3480,7 @@ export function CourtBookingDialog({
                       </label>
                     </div>
                     {payDirection === "debito" &&
+                      !viewIsDupla &&
                       !viewPendingPaymentId &&
                       existingParticipants.some((p) => p.client_id !== existing.client_id) && (
                         <SplitDebitOption
@@ -3332,7 +3496,7 @@ export function CourtBookingDialog({
                           amount={Number(payAmount.replace(",", ".")) || 0}
                         />
                       )}
-                    {payDirection !== "debito" && (
+                    {payDirection !== "debito" && !viewIsDupla && (
                       <ReceiveOpenDebtOption
                         clientId={payTargetClientId || existing.client_id}
                         value={receiveDebt}
