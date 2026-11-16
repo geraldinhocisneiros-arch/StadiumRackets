@@ -271,6 +271,19 @@ export function CourtBookingDialog({
   // jogadores; "individual" deixa digitar o valor de cada jogador.
   const [duplaPayMode, setDuplaPayMode] = useState<"igual" | "individual">("igual");
   const [duplaAmounts, setDuplaAmounts] = useState<Record<string, string>>({});
+  // Forma de pagamento / conta corrente / recebido POR JOGADOR quando o valor
+  // é lançado para vários clientes. Sem ajuste, vale o padrão (campos gerais).
+  const [playerPay, setPlayerPay] = useState<Record<string, Partial<PlayerPay>>>({});
+  const payFor = (id: string): PlayerPay => ({
+    method: playerPay[id]?.method ?? payMethod,
+    direction: playerPay[id]?.direction ?? payDirection,
+    received: playerPay[id]?.received ?? payReceived,
+  });
+  const patchPlayerPay = (id: string, patch: Partial<PlayerPay>) =>
+    setPlayerPay((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  useEffect(() => {
+    if (open) setPlayerPay({});
+  }, [open]);
   // Lançamento do segundo jogador (ex.: partida de ranking em que cada
   // jogador paga de um jeito diferente — um na hora, outro na pasta).
   const [wantsPayment2, setWantsPayment2] = useState<boolean>(false);
@@ -1107,14 +1120,14 @@ export function CourtBookingDialog({
           client_id: cid,
           category_id: categoryId,
           amount: splitAmounts[i]!,
-          method: (payMethod || "outro") as never,
+          method: ((splitTargets.length > 1 ? payFor(cid).method : payMethod) || "outro") as never,
           paid_at: paidAtIso,
           start_time: startTime,
           end_time: endTime,
           court,
-          received: payReceived,
-          to_account: payDirection !== "",
-          account_direction: payDirection || null,
+          received: splitTargets.length > 1 ? payFor(cid).received : payReceived,
+          to_account: (splitTargets.length > 1 ? payFor(cid).direction : payDirection) !== "",
+          account_direction: (splitTargets.length > 1 ? payFor(cid).direction : payDirection) || null,
           notes:
             splitTargets.length > 1
               ? `${baseNotes} · dividido em ${splitTargets.length}`
@@ -1143,7 +1156,8 @@ export function CourtBookingDialog({
         void offerWhatsAppPaymentNotification({
           clientId: cid,
           amount: splitAmounts[i]!,
-          accountDirection: payDirection || null,
+          accountDirection:
+            (splitTargets.length > 1 ? payFor(cid).direction : payDirection) || null,
           paidAt: paidAtIso,
           startTime,
         });
@@ -2200,14 +2214,14 @@ export function CourtBookingDialog({
         client_id: e.id,
         category_id: categoryId,
         amount: e.amount,
-        method: (payMethod || "outro") as never,
+        method: (payFor(e.id).method || "outro") as never,
         paid_at: paidAtIso,
         start_time: existing.start_time,
         end_time: existing.end_time,
         court: existing.court,
-        received: payReceived,
-        to_account: payDirection !== "",
-        account_direction: payDirection || null,
+        received: payFor(e.id).received,
+        to_account: payFor(e.id).direction !== "",
+        account_direction: payFor(e.id).direction || null,
         notes: duplaPayMode === "igual" ? `${baseNotes} · dividido em ${entries.length}` : baseNotes,
         recorded_by: user?.id ?? null,
         booking_id: existing.id,
@@ -2222,7 +2236,7 @@ export function CourtBookingDialog({
       void offerWhatsAppPaymentNotification({
         clientId: e.id,
         amount: e.amount,
-        accountDirection: payDirection || null,
+        accountDirection: payFor(e.id).direction || null,
         paidAt: paidAtIso,
         startTime: existing.start_time,
       });
@@ -2237,6 +2251,7 @@ export function CourtBookingDialog({
     setPayDirection("");
     setPayReceived(false);
     setDuplaAmounts({});
+    setPlayerPay({});
     onSaved();
     onOpenChange(false);
   };
@@ -2307,6 +2322,14 @@ export function CourtBookingDialog({
       : await supabase.from("payments").insert(
           viewSplitTargets.map((cid, i) => ({
             ...payload,
+            ...(viewSplitTargets.length > 1
+              ? {
+                  method: (payFor(cid).method || "outro") as never,
+                  received: payFor(cid).received,
+                  to_account: payFor(cid).direction !== "",
+                  account_direction: payFor(cid).direction || null,
+                }
+              : {}),
             client_id: cid,
             amount: viewSplitAmounts[i]!,
             notes:
@@ -2337,7 +2360,8 @@ export function CourtBookingDialog({
       void offerWhatsAppPaymentNotification({
         clientId: cid,
         amount: viewSplitAmounts[i]!,
-        accountDirection: payDirection || null,
+        accountDirection:
+          (viewSplitTargets.length > 1 ? payFor(cid).direction : payDirection) || null,
         paidAt: paidAtIso,
         startTime: existing.start_time,
       });
@@ -3368,28 +3392,9 @@ export function CourtBookingDialog({
                             .
                           </p>
                         ) : (
-                          <div className="space-y-2">
-                            <p className="text-xs text-muted-foreground">
-                              Digite o valor de quem vai pagar. Jogador sem valor não é lançado.
-                            </p>
-                            {viewPlayers.map((p) => (
-                              <div key={p.id} className="flex items-center gap-2">
-                                <span className="flex-1 truncate text-sm">{p.name}</span>
-                                <Input
-                                  className="w-32"
-                                  type="number"
-                                  inputMode="decimal"
-                                  step="0.01"
-                                  min="0"
-                                  placeholder="0,00"
-                                  value={duplaAmounts[p.id] ?? ""}
-                                  onChange={(e) =>
-                                    setDuplaAmounts((prev) => ({ ...prev, [p.id]: e.target.value }))
-                                  }
-                                />
-                              </div>
-                            ))}
-                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Digite abaixo o valor de quem vai pagar. Jogador sem valor não é lançado.
+                          </p>
                         )}
                       </div>
                     )}
@@ -3494,6 +3499,39 @@ export function CourtBookingDialog({
                             ).size
                           }
                           amount={Number(payAmount.replace(",", ".")) || 0}
+                        />
+                      )}
+                    {!viewPendingPaymentId &&
+                      viewPlayers.length > 1 &&
+                      (viewIsDupla || splitDebit) && (
+                        <PlayerPaymentRows
+                          rows={(() => {
+                            const total = parseMoneyInput(payAmount);
+                            const parts = splitEvenly(total, viewPlayers.length);
+                            return viewPlayers.map((p, i) => ({
+                              id: p.id,
+                              name: p.name,
+                              amount:
+                                viewIsDupla && duplaPayMode === "individual" ? (
+                                  <Input
+                                    className="h-8 w-24"
+                                    type="number"
+                                    inputMode="decimal"
+                                    step="0.01"
+                                    min="0"
+                                    placeholder="0,00"
+                                    value={duplaAmounts[p.id] ?? ""}
+                                    onChange={(e) =>
+                                      setDuplaAmounts((prev) => ({ ...prev, [p.id]: e.target.value }))
+                                    }
+                                  />
+                                ) : (
+                                  <span className="font-mono text-sm">{fmtBRL(parts[i] ?? 0)}</span>
+                                ),
+                            }));
+                          })()}
+                          resolve={payFor}
+                          onChange={patchPlayerPay}
                         />
                       )}
                     {payDirection !== "debito" && !viewIsDupla && (
@@ -4150,6 +4188,32 @@ export function CourtBookingDialog({
                           amount={Number(payAmount.replace(",", ".")) || 0}
                         />
                       )}
+                    {splitDebit &&
+                      !wantsPayment2 &&
+                      clientId &&
+                      extraClientIds.some((id) => id && id !== clientId) && (
+                        <PlayerPaymentRows
+                          rows={(() => {
+                            const ids = [
+                              clientId,
+                              ...Array.from(
+                                new Set(extraClientIds.filter((id) => id && id !== clientId)),
+                              ),
+                            ];
+                            const parts = splitEvenly(
+                              Number(payAmount.replace(",", ".")) || 0,
+                              ids.length,
+                            );
+                            return ids.map((id, i) => ({
+                              id,
+                              name: clients.find((c) => c.id === id)?.full_name ?? "Cliente",
+                              amount: <span className="font-mono text-sm">{fmtBRL(parts[i] ?? 0)}</span>,
+                            }));
+                          })()}
+                          resolve={payFor}
+                          onChange={patchPlayerPay}
+                        />
+                      )}
                     {payDirection !== "debito" && (
                       <ReceiveOpenDebtOption
                         clientId={clientId}
@@ -4287,6 +4351,72 @@ const WEEKDAY_OPTS = [
   { v: 5, label: "Sexta" },
   { v: 6, label: "Sábado" },
 ];
+
+type PlayerPay = { method: string; direction: "" | "debito" | "credito"; received: boolean };
+
+// Uma linha por jogador: valor, forma de pagamento, débito na conta corrente
+// e recebido — cada um pode pagar de um jeito.
+function PlayerPaymentRows({
+  rows,
+  resolve,
+  onChange,
+}: {
+  rows: { id: string; name: string; amount: React.ReactNode }[];
+  resolve: (id: string) => PlayerPay;
+  onChange: (id: string, patch: Partial<PlayerPay>) => void;
+}) {
+  return (
+    <div className="space-y-2 rounded-md border bg-background p-2">
+      <div className="text-xs font-medium">Por jogador</div>
+      <p className="text-[11px] text-muted-foreground">
+        Os campos acima são o padrão. Ajuste aqui quem paga de outro jeito.
+      </p>
+      {rows.map((r) => {
+        const v = resolve(r.id);
+        return (
+          <div key={r.id} className="space-y-1.5 border-t pt-2 first:border-t-0 first:pt-0">
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-sm font-medium">{r.name}</span>
+              {r.amount}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              <Select
+                value={v.method || "__none"}
+                onValueChange={(m) => onChange(r.id, { method: m === "__none" ? "" : m })}
+              >
+                <SelectTrigger className="h-8 w-40 text-xs">
+                  <SelectValue placeholder="Forma" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">— Nenhuma —</SelectItem>
+                  {PAYMENT_METHOD_OPTIONS.map(([val, l]) => (
+                    <SelectItem key={val} value={val}>
+                      {l}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <label className="flex items-center gap-1.5 text-xs">
+                <Checkbox
+                  checked={v.direction === "debito"}
+                  onCheckedChange={(c) => onChange(r.id, { direction: c === true ? "debito" : "" })}
+                />
+                Débito na conta
+              </label>
+              <label className="flex items-center gap-1.5 text-xs">
+                <Checkbox
+                  checked={v.received}
+                  onCheckedChange={(c) => onChange(r.id, { received: c === true })}
+                />
+                Recebido
+              </label>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function SplitDebitOption({
   checked,
