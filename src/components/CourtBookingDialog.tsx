@@ -56,8 +56,7 @@ import {
   type FixedSchedule,
   type FixedException,
   isRankingCategoryName,
-  isRankingMasculinoName,
-  isRankingFemininoName,
+  isRankingDuplaName,
   findFixedExceptionForHour,
   isManutencaoName,
   isManutencaoClientName,
@@ -694,34 +693,33 @@ export function CourtBookingDialog({
     if (endHour !== target) setEndHour(target);
   }, [open, existing, existingFixed, categoryId, startHour, endHour, categories, endHourTouched]);
 
-  // Atalhos "RKG Masc" / "RKG Fem": jogo de ranking é sempre avulso (não
-  // faz sentido como fixo semanal), então já seleciona a categoria de
-  // Ranking correspondente (o efeito acima cuida de ajustar o "Fim" para
-  // 2h após o "Início" automaticamente) e garante o segundo campo de
-  // cliente visível para os dois jogadores.
-  const applyRankingPreset = (target: "masculino" | "feminino") => {
-    const cat = categories.find((c) =>
-      target === "masculino" ? isRankingMasculinoName(c.name) : isRankingFemininoName(c.name),
+  // RKG Dupla: jogo de ranking em duplas — sempre avulso, 4 clientes
+  // obrigatórios (Dupla 1: jogadores 1 e 2; Dupla 2: jogadores 3 e 4) e sem
+  // professor. O efeito acima ajusta o "Fim" para 2h após o "Início".
+  const isDupla = isRankingDuplaName(categories.find((c) => c.id === categoryId)?.name);
+  useEffect(() => {
+    if (!isDupla) return;
+    setExtraClientIds((prev) =>
+      prev.length === 3 ? prev : [...prev, "", "", ""].slice(0, 3),
     );
+    setTeacherId("");
+    teacherAutoFilledRef.current = null;
+  }, [isDupla]);
+  const applyRankingDuplaPreset = () => {
+    const cat = categories.find((c) => isRankingDuplaName(c.name));
     if (!cat && categories.length === 0) {
       toast.info("Ainda carregando as categorias — tente de novo em instantes.");
       return;
     }
     if (!cat) {
-      toast.error(
-        `Categoria "Ranking ${target === "masculino" ? "Masculino" : "Feminino"}" não encontrada. Cadastre-a em Categorias.`,
-      );
+      toast.error('Categoria "Ranking Dupla" não encontrada. Cadastre-a em Categorias.');
       return;
     }
     setKind("avulsa");
     setCategoryId(cat.id);
-    // Ranking não tem professor: descarta o que veio do cadastro do cliente.
-    if (teacherAutoFilledRef.current && teacherId === teacherAutoFilledRef.current) {
-      setTeacherId("");
-      teacherAutoFilledRef.current = null;
-    }
+    setTeacherId("");
+    teacherAutoFilledRef.current = null;
     setEndHourTouched(false);
-    setExtraClientIds((prev) => (prev.length > 0 ? prev : [""]));
   };
 
   // Stadium Rackets: o professor é OPCIONAL na locação avulsa — muita gente
@@ -888,7 +886,21 @@ export function CourtBookingDialog({
       return;
     }
 
-    if (isTeacherRequired() && !teacherId) {
+    if (isDupla) {
+      const players = [clientId, ...extraClientIds.slice(0, 3)];
+      if (players.some((id) => !id)) {
+        setSubmitting(false);
+        toast.error("RKG Dupla precisa dos 4 jogadores (2 duplas).");
+        return;
+      }
+      if (new Set(players).size !== 4) {
+        setSubmitting(false);
+        toast.error("RKG Dupla: o mesmo cliente foi escolhido duas vezes.");
+        return;
+      }
+    }
+
+    if (!isDupla && isTeacherRequired() && !teacherId) {
       setSubmitting(false);
       toast.error("Selecione o professor da locação avulsa");
       return;
@@ -982,10 +994,17 @@ export function CourtBookingDialog({
       source: "avulsa",
       client_id: clientId || null,
       category_id: categoryId || null,
-      teacher_id: teacherId || null,
+      teacher_id: isDupla ? null : teacherId || null,
       guest_name: guestType === "convidado" ? (guestName.trim() || null) : null,
       guest_type: guestType || null,
-      notes: notes.trim() || null,
+      notes: (() => {
+        const typed = notes.trim();
+        if (!isDupla) return typed || null;
+        const nm = (id: string) => clients.find((c) => c.id === id)?.full_name ?? "?";
+        const [a, b, c] = extraClientIds;
+        const duplas = `Dupla 1: ${nm(clientId)} / ${nm(a!)} × Dupla 2: ${nm(b!)} / ${nm(c!)}`;
+        return typed ? `${duplas} · ${typed}` : duplas;
+      })(),
       created_by: user?.id ?? null,
     } as never).select(COURT_MAP_BOOKING_SELECT).single();
     if (error) {
@@ -3713,27 +3732,13 @@ export function CourtBookingDialog({
                 </div>
                 <button
                   type="button"
-                  onClick={() => applyRankingPreset("masculino")}
-                  title="Preenche categoria Ranking Masculino, 2h de duração e abre os campos de jogadores"
+                  onClick={applyRankingDuplaPreset}
+                  title="Jogo de ranking em duplas: 4 clientes (2 duplas), 2h de duração, sem professor"
                   className={`px-3 py-1.5 rounded-md border text-sm font-medium transition-colors ${
-                    isRankingMasculinoName(categories.find((c) => c.id === categoryId)?.name)
-                      ? "bg-blue-600 text-white border-blue-600"
-                      : "hover:bg-muted"
+                    isDupla ? "bg-violet-600 text-white border-violet-600" : "hover:bg-muted"
                   }`}
                 >
-                  RKG Masc
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyRankingPreset("feminino")}
-                  title="Preenche categoria Ranking Feminino, 2h de duração e abre os campos de jogadores"
-                  className={`px-3 py-1.5 rounded-md border text-sm font-medium transition-colors ${
-                    isRankingFemininoName(categories.find((c) => c.id === categoryId)?.name)
-                      ? "bg-pink-600 text-white border-pink-600"
-                      : "hover:bg-muted"
-                  }`}
-                >
-                  RKG Fem
+                  RKG Dupla
                 </button>
               </div>
               {kind === "fixo" && (
@@ -3747,16 +3752,21 @@ export function CourtBookingDialog({
             {/* 3. Clientes (unificado: principal + adicionais) */}
             <div className="space-y-2 rounded-md border p-3 bg-muted/30">
               <div className="flex items-center justify-between">
-                <Label className="text-sm">Cliente(s) *</Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setExtraClientIds((prev) => [...prev, ""])}
-                >
-                  + Adicionar cliente
-                </Button>
+                <Label className="text-sm">
+                  {isDupla ? "Jogadores * (4 clientes, 2 duplas)" : "Cliente(s) *"}
+                </Label>
+                {!isDupla && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setExtraClientIds((prev) => [...prev, ""])}
+                  >
+                    + Adicionar cliente
+                  </Button>
+                )}
               </div>
+              {isDupla && <p className="text-xs font-semibold text-violet-700 dark:text-violet-300">Dupla 1</p>}
               <ClientCombobox
                 clients={clients}
                 value={clientId}
@@ -3768,7 +3778,7 @@ export function CourtBookingDialog({
                       : [...prev, c].sort((a, b) => a.full_name.localeCompare(b.full_name)),
                   )
                 }
-                placeholder="Selecione o cliente"
+                placeholder={isDupla ? "Dupla 1 — jogador 1" : "Selecione o cliente"}
               />
               {selectedClientBalance !== null && selectedClientBalance < 0 && (
                 <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">
@@ -3777,7 +3787,11 @@ export function CourtBookingDialog({
                 </div>
               )}
               {extraClientIds.map((cid, idx) => (
-                <div key={idx} className="flex gap-2">
+                <div key={idx} className="space-y-2">
+                {isDupla && idx === 1 && (
+                  <p className="pt-1 text-xs font-semibold text-violet-700 dark:text-violet-300">Dupla 2</p>
+                )}
+                <div className="flex gap-2">
                   <div className="flex-1">
                     <ClientCombobox
                       clients={clients}
@@ -3792,19 +3806,27 @@ export function CourtBookingDialog({
                             : [...prev, c].sort((a, b) => a.full_name.localeCompare(b.full_name)),
                         )
                       }
-                      placeholder="Cliente adicional"
+                      placeholder={
+                        isDupla
+                          ? ["Dupla 1 — jogador 2", "Dupla 2 — jogador 1", "Dupla 2 — jogador 2"][idx] ??
+                            "Cliente adicional"
+                          : "Cliente adicional"
+                      }
                     />
                   </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      setExtraClientIds((prev) => prev.filter((_, i) => i !== idx))
-                    }
-                  >
-                    Remover
-                  </Button>
+                  {!isDupla && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        setExtraClientIds((prev) => prev.filter((_, i) => i !== idx))
+                      }
+                    >
+                      Remover
+                    </Button>
+                  )}
+                </div>
                 </div>
               ))}
               {kind === "fixo" && extraClientIds.length > 0 && (
@@ -3837,12 +3859,14 @@ export function CourtBookingDialog({
             </div>
 
 
-            <TeacherSelect
-              value={teacherId}
-              onChange={setTeacherId}
-              teachers={teachers}
-              required={isTeacherRequired()}
-            />
+            {!isDupla && (
+              <TeacherSelect
+                value={teacherId}
+                onChange={setTeacherId}
+                teachers={teachers}
+                required={isTeacherRequired()}
+              />
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
