@@ -29,6 +29,7 @@ import { fetchAll } from "@/lib/fetchAll";
 import { MonthEndProjectionButton } from "@/components/MonthEndProjectionButton";
 import { useServerFn } from "@tanstack/react-start";
 import { deleteClientAccount } from "@/lib/users.functions";
+import { CategoryTabs } from "@/components/CategoryTabs";
 
 export const Route = createFileRoute("/clientes")({
   component: () => (
@@ -158,6 +159,29 @@ function ClientesPage() {
 
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
+  const categoryName = (id: string | null) =>
+    id ? (categoryList.find((c) => c.id === id)?.name ?? "—") : "—";
+
+  // Base das abas: respeita só o "Mostrar inativos", pra contagem de cada
+  // categoria não mudar conforme a busca ou o filtro de saldo.
+  const tabBase = clients.filter((c) => showInactive || c.active);
+
+  // Resumo da lista filtrada (ex.: aba "Escolinha Pickleball"): quem está em
+  // dia, quem deve e quanto. "Em dia" = saldo da conta >= 0.
+  const summary = filtered.reduce(
+    (acc, c) => {
+      if (c.balance < 0) {
+        acc.debtCount += 1;
+        acc.debtTotal += c.balance;
+      } else {
+        acc.okCount += 1;
+      }
+      if (c.balance > 0) acc.creditTotal += c.balance;
+      return acc;
+    },
+    { okCount: 0, debtCount: 0, debtTotal: 0, creditTotal: 0 },
+  );
+
   const handlePrint = () => {
     const now = new Date().toLocaleString("pt-BR");
     const filterDesc: string[] = [];
@@ -192,6 +216,7 @@ function ClientesPage() {
       const balanceColor = isDebt ? "color:#b91c1c;font-weight:600;" : c.balance > 0 ? "color:#15803d;font-weight:600;" : "color:#6b7280;";
       return `<tr ${rowStyle}>
         <td>${escapeHtml(c.full_name)}</td>
+        <td>${escapeHtml(categoryName(c.category_id))}</td>
         <td>${escapeHtml(c.phone ?? "—")}</td>
         <td>${c.due_day ? `Dia ${c.due_day}` : "—"}</td>
         <td style="text-align:center;">${c.is_gympass ? "Sim" : "—"}</td>
@@ -214,9 +239,10 @@ function ClientesPage() {
 </style></head><body>
   <h1>Lista de Clientes</h1>
   <div class="meta">Gerado em ${now} • ${filtered.length} ${filtered.length === 1 ? "cliente" : "clientes"}${filterDesc.length ? " • " + filterDesc.join(" • ") : ""}</div>
+  <div class="total">Em dia: <strong>${summary.okCount}</strong> • Devendo: <strong>${summary.debtCount}</strong> (${fmtBRL(summary.debtTotal)})</div>
   ${showCreditTotal ? `<div class="total"><strong>Total de crédito:</strong> ${fmtBRL(totalCredit)}</div>` : ""}
   <table>
-    <thead><tr><th>Nome</th><th>Telefone</th><th>Vencimento</th><th style="text-align:center">Gympass</th><th style="text-align:right">Saldo</th><th>Status</th></tr></thead>
+    <thead><tr><th>Nome</th><th>Categoria</th><th>Telefone</th><th>Vencimento</th><th style="text-align:center">Gympass</th><th style="text-align:right">Saldo</th><th>Status</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
   <script>window.onload=()=>{window.print();}</script>
@@ -258,7 +284,13 @@ function ClientesPage() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="space-y-4">
+          <CategoryTabs
+            categories={categoryList}
+            items={tabBase}
+            value={categoryFilter}
+            onChange={setCategoryFilter}
+          />
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <Input
               placeholder="Buscar por nome..."
@@ -314,20 +346,6 @@ function ClientesPage() {
                   <SelectItem value="non_gympass">Sem Gympass</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Categoria" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as categorias</SelectItem>
-                  <SelectItem value="none">Sem categoria</SelectItem>
-                  {categoryList.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               <div className="flex items-center gap-2">
                 <Switch id="inactive" checked={showInactive} onCheckedChange={setShowInactive} />
                 <Label htmlFor="inactive" className="cursor-pointer">
@@ -354,6 +372,31 @@ function ClientesPage() {
                   </Button>
                 </div>
               )}
+              {!loading && filtered.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-x-6 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                  <span>
+                    <span className="text-muted-foreground">
+                      {categoryFilter === "all" ? "Clientes" : categoryFilter === "none" ? "Sem categoria" : categoryName(categoryFilter)}:
+                    </span>{" "}
+                    <strong>{filtered.length}</strong>
+                  </span>
+                  <span>
+                    <span className="text-muted-foreground">Em dia:</span>{" "}
+                    <strong className="text-success">{summary.okCount}</strong>
+                  </span>
+                  <span>
+                    <span className="text-muted-foreground">Devendo:</span>{" "}
+                    <strong className="text-destructive">{summary.debtCount}</strong>
+                    {summary.debtCount > 0 && (
+                      <span className="text-destructive"> ({fmtBRL(summary.debtTotal)})</span>
+                    )}
+                  </span>
+                  <span>
+                    <span className="text-muted-foreground">Crédito em conta:</span>{" "}
+                    <strong>{fmtBRL(summary.creditTotal)}</strong>
+                  </span>
+                </div>
+              )}
               {(balanceFilter === "credit" || balanceFilter === "low_credit") && (
                 <div className="mb-3 text-sm text-muted-foreground">
                   Total de crédito ({filtered.length} {filtered.length === 1 ? "cliente" : "clientes"}):{" "}
@@ -366,6 +409,7 @@ function ClientesPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nome</TableHead>
+                    <TableHead>Categoria</TableHead>
                     <TableHead>Telefone</TableHead>
                     <TableHead>Vencimento</TableHead>
                     <TableHead className="text-center">Gympass</TableHead>
@@ -403,6 +447,7 @@ function ClientesPage() {
                             {c.full_name}
                           </Link>
                         </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{categoryName(c.category_id)}</TableCell>
                         <TableCell className="text-sm">{c.phone ?? "—"}</TableCell>
                         <TableCell>{c.due_day ? `Dia ${c.due_day}` : "—"}</TableCell>
                         <TableCell className="text-center">
@@ -483,7 +528,7 @@ function ClientesPage() {
                   })}
                   {filtered.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                         Nenhum cliente encontrado.
                       </TableCell>
                     </TableRow>
