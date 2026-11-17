@@ -93,6 +93,7 @@ import {
   isBillableFixed,
   type AttendanceStatus,
 } from "@/lib/attendance-billing";
+import { ClassDayDialog, type ClassDayData } from "@/components/ClassDayDialog";
 
 export const Route = createFileRoute("/mapa")({
   component: MapaRoute,
@@ -372,6 +373,8 @@ function MapaPage() {
   const [mensalistaCategoryId, setMensalistaCategoryId] = useState<string | null>(null);
   // Categoria "Avulso": base do aviso de preço promocional online no mapa.
   const [avulsoCategoryId, setAvulsoCategoryId] = useState<string | null>(null);
+  // Turma de pickleball clicada no mapa (mostra a turma, sem cobrança).
+  const [classDay, setClassDay] = useState<ClassDayData | null>(null);
   const [attendanceDialog, setAttendanceDialog] = useState<{
     open: boolean;
     hour: number;
@@ -664,7 +667,7 @@ function MapaPage() {
           s.court === court &&
           Number(s.start_time.slice(0, 2)) <= hour &&
           Number(s.end_time.slice(0, 2)) > hour &&
-          isBillableFixed(s.clients?.full_name) &&
+          isBillableFixed(s) &&
           !findFixedExceptionForHour(s.exceptions, hour),
       )
       .map((s) => ({
@@ -880,12 +883,18 @@ function MapaPage() {
       });
       return;
     }
+    // Turma de pickleball: mensalidade única, sem presença/cobrança por
+    // aula — mostra só a turma (alunos, professor) com atalho para Turmas.
+    if (cell.kind === "fixed" && !cell.cancelledException && cell.fixed?.class_id) {
+      setClassDay({ fixed: cell.fixed, siblings: cell.fixedSiblings ?? [] });
+      return;
+    }
     // Fixo ativo (não cancelado) e cobrável → menu de presença.
     if (
       cell.kind === "fixed" &&
       !cell.cancelledException &&
       cell.fixed &&
-      isBillableFixed(cell.fixed.clients?.full_name)
+      isBillableFixed(cell.fixed)
     ) {
       setAttendanceDialog({
         open: true,
@@ -902,7 +911,7 @@ function MapaPage() {
       cell.booking &&
       !cell.booking.cancelled_at &&
       isMovedFromFixedBooking(cell.booking) &&
-      isBillableFixed(cell.booking.clients?.full_name)
+      isBillableFixed(fixed.find((s) => s.id === movedFixedScheduleByBookingId[cell.booking!.id]))
     ) {
       const schedId = movedFixedScheduleByBookingId[cell.booking.id];
       if (schedId) {
@@ -1208,6 +1217,14 @@ function MapaPage() {
         }}
       />
 
+      <ClassDayDialog
+        data={classDay}
+        date={date}
+        onOpenChange={(v) => {
+          if (!v) setClassDay(null);
+        }}
+      />
+
       {(() => {
         const rawSched = attendanceDialog.scheduleId
           ? fixed.find((s) => s.id === attendanceDialog.scheduleId)
@@ -1246,7 +1263,7 @@ function MapaPage() {
               // por client_schedule.id caso os dois achem a mesma pessoa.
               const fromGroup = (attendanceDialog.movedGroupSiblingIds ?? [])
                 .map((id) => fixed.find((s) => s.id === id))
-                .filter((s): s is FixedSchedule => !!s && isBillableFixed(s.clients?.full_name))
+                .filter((s): s is FixedSchedule => !!s && isBillableFixed(s))
                 .map((s) => ({
                   schedule: s,
                   status: (attendanceForSchedule(s.id)?.status as AttendanceStatus | null) ?? null,
@@ -1332,6 +1349,7 @@ function Legend() {
   const items = [
     { label: "Disponível", cls: "bg-emerald-500/15 border-emerald-500/40" },
     { label: "Fixo (mensalista)", cls: "bg-muted border-muted-foreground/30" },
+    { label: "Turma pickleball", cls: "bg-violet-300/40 border-violet-500/50" },
     { label: "Avulsa", cls: "bg-sky-500/15 border-sky-500/40" },
     { label: "Professor", cls: "bg-purple-500/15 border-purple-500/40" },
   ];
@@ -1787,7 +1805,7 @@ function MapaProfessorPage({
             s.is_own &&
             Number(s.start_time.slice(0, 2)) <= target.hour &&
             Number(s.end_time.slice(0, 2)) > target.hour &&
-            isBillableFixed(s.clients?.full_name) &&
+            isBillableFixed(s) &&
             !findFixedExceptionForHour(excByScheduleId.get(s.id), target.hour),
         )
         .map((s) => ({

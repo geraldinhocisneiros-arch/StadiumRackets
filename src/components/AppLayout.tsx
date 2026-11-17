@@ -69,6 +69,12 @@ const NAV: NavItem[] = [
     icon: Repeat,
     rolesAllowed: ["admin", "diretoria", "recepcionista"],
   },
+  {
+    to: "/turmas",
+    label: "Turmas pickleball",
+    icon: Users,
+    rolesAllowed: ["admin", "diretoria", "recepcionista"],
+  },
   { to: "/financas", label: "Finanças", icon: Wallet, pageKey: "financas" },
   {
     to: "/fechamentos",

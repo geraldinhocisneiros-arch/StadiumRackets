@@ -22,10 +22,10 @@ export const CHARGEABLE_STATUSES: AttendanceStatus[] = [
 export const isChargeable = (s: AttendanceStatus | null | undefined) =>
   s != null && CHARGEABLE_STATUSES.includes(s);
 
-// Fixos ("mensalistas") que entram no fluxo de presença. No Stadium
-// Rackets todo fixo entra (não há aulas em grupo cobradas fora do caixa);
-// mantido como função pra centralizar a regra caso isso mude.
-export const isBillableFixed = (_fullName?: string | null) => true;
+// Fixos que entram no fluxo de presença (cada aula vira lançamento no
+// caixa). Matrícula de turma de pickleball NÃO entra: o aluno paga uma
+// mensalidade única pelo mês (ver src/lib/pickleball-classes.ts).
+export const isBillableFixed = (s?: { class_id?: string | null } | null) => !s?.class_id;
 
 interface BillArgs {
   bands: PriceBand[];

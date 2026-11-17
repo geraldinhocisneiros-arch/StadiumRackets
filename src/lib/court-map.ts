@@ -111,6 +111,10 @@ export const SOURCE_COLOR: Record<string, string> = {
 export const FIXED_COLOR =
   "bg-green-800/20 border-green-900/30 text-green-950 dark:text-green-100";
 
+// Turma fixa de pickleball (mensalidade única, sem cobrança por aula).
+export const CLASS_COLOR =
+  "bg-violet-300/40 border-violet-500/50 text-violet-950 dark:bg-violet-500/25 dark:text-violet-50";
+
 export interface BookingParticipant {
   client_id: string;
   full_name: string;
@@ -273,6 +277,11 @@ export interface FixedSchedule {
   day_note?: string | null;
   // Portal professor: marcado como próprio quando o cliente é vinculado ao professor
   is_own?: boolean;
+  // Matrícula de turma de pickleball (ver src/lib/pickleball-classes.ts):
+  // ocupa a quadra, mas não gera cobrança por aula.
+  class_id?: string | null;
+  class_monthly_amount?: number | null;
+  pickleball_classes?: { id: string; name: string } | null;
 }
 
 // Retorna a exceção que cobre a hora informada (ou null se não houver).
