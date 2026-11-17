@@ -43,7 +43,6 @@ import {
 import { AvailabilitySearchDialog } from "@/components/AvailabilitySearchDialog";
 import { FixedAvailabilitySearchDialog } from "@/components/FixedAvailabilitySearchDialog";
 import { AvailabilityOverrideDialog, type AvailabilityOverride } from "@/components/AvailabilityOverrideDialog";
-import { RacketLoansPanel } from "@/components/RacketLoansPanel";
 import { StaffWaitlistAddDialog } from "@/components/StaffWaitlistAddDialog";
 import { RequestReservationDialog } from "@/components/RequestReservationDialog";
 import { TeacherDirectBookingDialog } from "@/components/TeacherDirectBookingDialog";
@@ -1047,8 +1046,6 @@ function MapaPage() {
 
           
 
-
-          {canManageAvailability && <RacketLoansPanel />}
 
           {canManageAvailability &&
             priceBands.some(
