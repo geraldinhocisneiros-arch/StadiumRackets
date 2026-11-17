@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +41,8 @@ interface Schedule {
   teachers?: { id: string; name: string } | null;
   valid_from?: string | null;
   valid_until?: string | null;
+  // Matrícula de turma de pickleball: é gerida na tela de Turmas.
+  class_id?: string | null;
 }
 
 const fmtBR = (iso: string | null | undefined) => {
@@ -149,7 +152,13 @@ export function ClientSchedulesCard({
             : "Permanente"}
       </TableCell>
       <TableCell className="text-muted-foreground text-sm">{s.notes ?? "—"}</TableCell>
-      {canManage && (
+      {canManage && s.class_id ? (
+        <TableCell className="text-right text-xs">
+          <Link to="/turmas" className="underline-offset-2 hover:underline">
+            Gerir em Turmas
+          </Link>
+        </TableCell>
+      ) : canManage && (
         <TableCell className="text-right">
           {!isEnded && (
             <Button

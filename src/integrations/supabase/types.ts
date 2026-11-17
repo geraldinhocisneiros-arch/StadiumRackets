@@ -697,6 +697,8 @@ export type Database = {
       }
       client_schedules: {
         Row: {
+          class_id: string | null
+          class_monthly_amount: number | null
           client_id: string
           court: number | null
           created_at: string
@@ -713,6 +715,8 @@ export type Database = {
           weekday: number
         }
         Insert: {
+          class_id?: string | null
+          class_monthly_amount?: number | null
           client_id: string
           court?: number | null
           created_at?: string
@@ -729,6 +733,8 @@ export type Database = {
           weekday: number
         }
         Update: {
+          class_id?: string | null
+          class_monthly_amount?: number | null
           client_id?: string
           court?: number | null
           created_at?: string
@@ -745,6 +751,13 @@ export type Database = {
           weekday?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "client_schedules_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "pickleball_classes"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "client_schedules_client_id_fkey"
             columns: ["client_id"]
@@ -2231,6 +2244,110 @@ export type Database = {
         }
         Relationships: []
       }
+      pickleball_class_billing: {
+        Row: {
+          account_entry_id: string | null
+          amount: number
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          reference_month: string
+        }
+        Insert: {
+          account_entry_id?: string | null
+          amount: number
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          reference_month: string
+        }
+        Update: {
+          account_entry_id?: string | null
+          amount?: number
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          reference_month?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pickleball_class_billing_account_entry_id_fkey"
+            columns: ["account_entry_id"]
+            isOneToOne: false
+            referencedRelation: "account_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pickleball_class_billing_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pickleball_classes: {
+        Row: {
+          capacity: number | null
+          court: number
+          created_at: string
+          created_by: string | null
+          end_time: string
+          id: string
+          name: string
+          notes: string | null
+          start_time: string
+          teacher_id: string | null
+          updated_at: string
+          valid_from: string | null
+          valid_until: string | null
+          weekday: number
+        }
+        Insert: {
+          capacity?: number | null
+          court: number
+          created_at?: string
+          created_by?: string | null
+          end_time: string
+          id?: string
+          name: string
+          notes?: string | null
+          start_time: string
+          teacher_id?: string | null
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+          weekday: number
+        }
+        Update: {
+          capacity?: number | null
+          court?: number
+          created_at?: string
+          created_by?: string | null
+          end_time?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          start_time?: string
+          teacher_id?: string | null
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+          weekday?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pickleball_classes_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portal_signup_tokens: {
         Row: {
           client_id: string
@@ -2982,6 +3099,33 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _is_class_staff: { Args: { _uid: string }; Returns: boolean }
+      _is_whatsapp_staff: { Args: { _uid: string }; Returns: boolean }
+      _materialize_swapped_fixed: {
+        Args: {
+          _date: string
+          _from_court: number
+          _ids: string[]
+          _mirror_client: string
+          _mirror_start: string
+          _to_court: number
+        }
+        Returns: undefined
+      }
+      _pickleball_fee_description: { Args: { _month: string }; Returns: string }
+      _whatsapp_destinatarios: {
+        Args: {
+          _categoria_ids: string[]
+          _professores: boolean
+          _sem_categoria: boolean
+        }
+        Returns: {
+          client_id: string
+          nome: string
+          teacher_id: string
+          telefone: string
+        }[]
+      }
       admin_save_client_schedule: {
         Args: {
           _client_id: string
@@ -3444,6 +3588,56 @@ export type Database = {
       payment_stock_item_name: {
         Args: { _category_id: string; _client_id: string }
         Returns: string
+      }
+      pickleball_class_add_member: {
+        Args: {
+          _class_id: string
+          _client_id: string
+          _monthly_amount: number
+          _start?: string
+        }
+        Returns: string
+      }
+      pickleball_class_fee_preview: {
+        Args: { _month: string }
+        Returns: {
+          amount: number
+          classes: string
+          client_id: string
+          full_name: string
+          status: string
+        }[]
+      }
+      pickleball_class_generate_fees: {
+        Args: { _month: string }
+        Returns: {
+          generated: number
+          total: number
+        }[]
+      }
+      pickleball_class_remove_member: {
+        Args: { _end_date?: string; _schedule_id: string }
+        Returns: undefined
+      }
+      pickleball_class_save: {
+        Args: {
+          _capacity: number
+          _court: number
+          _end: string
+          _id: string
+          _name: string
+          _notes: string
+          _start: string
+          _teacher_id: string
+          _valid_from: string
+          _valid_until: string
+          _weekday: number
+        }
+        Returns: string
+      }
+      pickleball_class_set_member_amount: {
+        Args: { _monthly_amount: number; _schedule_id: string }
+        Returns: undefined
       }
       portal_can_view_client: { Args: { _client_id: string }; Returns: boolean }
       portal_cancel_booking: {

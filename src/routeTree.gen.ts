@@ -38,6 +38,7 @@ import { Route as SetupRouteImport } from './routes/setup'
 import { Route as TarefasRouteImport } from './routes/tarefas'
 import { Route as TrocasClienteRouteImport } from './routes/trocas-cliente'
 import { Route as TrustRouteImport } from './routes/trust'
+import { Route as TurmasRouteImport } from './routes/turmas'
 import { Route as UsuariosRouteImport } from './routes/usuarios'
 import { Route as VagasFixasRouteImport } from './routes/vagas-fixas'
 import { Route as VinculosProfessorRouteImport } from './routes/vinculos-professor'
@@ -205,6 +206,11 @@ const TrustRoute = TrustRouteImport.update({
   path: '/trust',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TurmasRoute = TurmasRouteImport.update({
+  id: '/turmas',
+  path: '/turmas',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const UsuariosRoute = UsuariosRouteImport.update({
   id: '/usuarios',
   path: '/usuarios',
@@ -343,6 +349,7 @@ export interface FileRoutesByFullPath {
   '/tarefas': typeof TarefasRoute
   '/trocas-cliente': typeof TrocasClienteRoute
   '/trust': typeof TrustRoute
+  '/turmas': typeof TurmasRoute
   '/usuarios': typeof UsuariosRoute
   '/vagas-fixas': typeof VagasFixasRoute
   '/vinculos-professor': typeof VinculosProfessorRoute
@@ -394,6 +401,7 @@ export interface FileRoutesByTo {
   '/tarefas': typeof TarefasRoute
   '/trocas-cliente': typeof TrocasClienteRoute
   '/trust': typeof TrustRoute
+  '/turmas': typeof TurmasRoute
   '/usuarios': typeof UsuariosRoute
   '/vagas-fixas': typeof VagasFixasRoute
   '/vinculos-professor': typeof VinculosProfessorRoute
@@ -447,6 +455,7 @@ export interface FileRoutesById {
   '/tarefas': typeof TarefasRoute
   '/trocas-cliente': typeof TrocasClienteRoute
   '/trust': typeof TrustRoute
+  '/turmas': typeof TurmasRoute
   '/usuarios': typeof UsuariosRoute
   '/vagas-fixas': typeof VagasFixasRoute
   '/vinculos-professor': typeof VinculosProfessorRoute
@@ -501,6 +510,7 @@ export interface FileRouteTypes {
     | '/tarefas'
     | '/trocas-cliente'
     | '/trust'
+    | '/turmas'
     | '/usuarios'
     | '/vagas-fixas'
     | '/vinculos-professor'
@@ -552,6 +562,7 @@ export interface FileRouteTypes {
     | '/tarefas'
     | '/trocas-cliente'
     | '/trust'
+    | '/turmas'
     | '/usuarios'
     | '/vagas-fixas'
     | '/vinculos-professor'
@@ -604,6 +615,7 @@ export interface FileRouteTypes {
     | '/tarefas'
     | '/trocas-cliente'
     | '/trust'
+    | '/turmas'
     | '/usuarios'
     | '/vagas-fixas'
     | '/vinculos-professor'
@@ -657,6 +669,7 @@ export interface RootRouteChildren {
   TarefasRoute: typeof TarefasRoute
   TrocasClienteRoute: typeof TrocasClienteRoute
   TrustRoute: typeof TrustRoute
+  TurmasRoute: typeof TurmasRoute
   UsuariosRoute: typeof UsuariosRoute
   VagasFixasRoute: typeof VagasFixasRoute
   VinculosProfessorRoute: typeof VinculosProfessorRoute
@@ -870,6 +883,13 @@ declare module '@tanstack/react-router' {
       path: '/trust'
       fullPath: '/trust'
       preLoaderRoute: typeof TrustRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/turmas': {
+      id: '/turmas'
+      path: '/turmas'
+      fullPath: '/turmas'
+      preLoaderRoute: typeof TurmasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/usuarios': {
@@ -1115,6 +1135,7 @@ const rootRouteChildren: RootRouteChildren = {
   TarefasRoute: TarefasRoute,
   TrocasClienteRoute: TrocasClienteRoute,
   TrustRoute: TrustRoute,
+  TurmasRoute: TurmasRoute,
   UsuariosRoute: UsuariosRoute,
   VagasFixasRoute: VagasFixasRoute,
   VinculosProfessorRoute: VinculosProfessorRoute,
