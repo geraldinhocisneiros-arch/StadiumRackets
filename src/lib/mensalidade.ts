@@ -21,6 +21,10 @@ const MONTHS = [
 /** Recebe o nome da categoria já normalizado (sem acento, minúsculo). */
 export const isEscolinhaCategory = (catNorm: string): boolean => catNorm.startsWith("escolinha");
 
+/** Categorias lançadas com mês de referência: mensalidade e Play Pickleball. */
+export const hasReferenceMonth = (catNorm: string): boolean =>
+  isEscolinhaCategory(catNorm) || catNorm === "play pickleball";
+
 /*
  * Tênis e pickleball funcionam igual: "Gerar mensalidades" lança o débito do
  * mês na conta e o pagamento no Caixa entra como CRÉDITO que abate.

@@ -24,7 +24,8 @@ import { fmtBRL, fmtDateTime, todayISO, normalizeText, dateISOInRecife, recifeDa
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { offerWhatsAppPaymentNotification, sendWhatsAppPaymentNotification } from "@/lib/whatsapp";
-import { isEscolinhaCategory, mensalidadeMonthOptions, currentMonthRef, shortMonthRef } from "@/lib/mensalidade";
+import { isEscolinhaCategory, hasReferenceMonth, mensalidadeMonthOptions, currentMonthRef, shortMonthRef } from "@/lib/mensalidade";
+import { isPlayPickleballCategory, PLAYS_PER_MONTH } from "@/lib/play-pickleball";
 import { Plus, Loader2, UserPlus, Pencil, CalendarIcon, Printer, Trash2, X, Paperclip, MessageCircle } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -139,6 +140,8 @@ interface FormState {
   isPendingPayment: boolean;
   /** Mês da mensalidade da escolinha ("2026-11-01"); vazio nas demais categorias. */
   referenceMonth: string;
+  /** Mensalidade da Escolinha Pickleball paga junto com o Play do mês. */
+  includePlay: boolean;
 }
 
 const emptyForm = (): FormState => ({
@@ -161,6 +164,7 @@ const emptyForm = (): FormState => ({
   quantity: "1",
   isPendingPayment: false,
   referenceMonth: "",
+  includePlay: false,
 });
 
 
@@ -185,6 +189,8 @@ function CaixaPage() {
 
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
+  const playCategoryId =
+    categories.find((c) => isPlayPickleballCategory(normalizeCategoryName(c.name)))?.id ?? null;
   const [priceBands, setPriceBands] = useState<PriceBand[]>([]);
   const [amountManuallyEdited, setAmountManuallyEdited] = useState(false);
   const [editAmountManuallyEdited, setEditAmountManuallyEdited] = useState(false);
@@ -775,7 +781,7 @@ function CaixaPage() {
         !isEstorno && f.isNewPlanSale ? f.commissionUserId || user?.id || null : null,
       quantity: isStockCat ? Math.max(1, parseInt(f.quantity, 10) || 1) : 1,
       is_pending_payment: isStockCat ? f.isPendingPayment : false,
-      reference_month: isEscolinhaCategory(catNorm) ? f.referenceMonth || null : null,
+      reference_month: hasReferenceMonth(catNorm) ? f.referenceMonth || null : null,
     };
 
   };
@@ -817,28 +823,36 @@ function CaixaPage() {
     if (submitCatNorm === "estorno") {
       setForm((f) => ({ ...f, amount: "", method: "", court: "", startTime: "", endTime: "", received: true, accountDirection: "credito", isNewPlanSale: false }));
     }
-    if (isEscolinhaCategory(submitCatNorm)) {
+    if (hasReferenceMonth(submitCatNorm)) {
+      const oQue = isPlayPickleballCategory(submitCatNorm) ? "Play" : "mensalidade";
       if (!form.referenceMonth) {
-        toast.error("Escolha o mês da mensalidade.");
+        toast.error(`Escolha o mês ${oQue === "Play" ? "do Play" : "da mensalidade"}.`);
         return;
       }
-      if (form.received && !form.method) {
-        toast.error("Escolha a forma de pagamento da mensalidade.");
+      if ((form.received || form.includePlay) && !form.method) {
+        toast.error(`Escolha a forma de pagamento ${oQue === "Play" ? "do Play" : "da mensalidade"}.`);
         return;
       }
-      const { data: jaPagos } = await supabase
-        .from("payments")
-        .select("client_id, clients(full_name)")
-        .in("client_id", form.clientIds)
-        .eq("reference_month", form.referenceMonth);
-      if (jaPagos && jaPagos.length > 0) {
-        const nomes = Array.from(
-          new Set(jaPagos.map((r) => (r.clients as { full_name: string } | null)?.full_name ?? "cliente")),
-        ).join(", ");
-        const ok = await confirm(
-          `${nomes} já tem mensalidade de ${shortMonthRef(form.referenceMonth)} lançada. Lançar de novo?`,
-        );
-        if (!ok) return;
+      const checks: { catId: string; label: string }[] = [{ catId: form.categoryId, label: oQue }];
+      if (form.includePlay && playCategoryId && isEscolinhaCategory(submitCatNorm)) {
+        checks.push({ catId: playCategoryId, label: "Play" });
+      }
+      for (const chk of checks) {
+        const { data: jaPagos } = await supabase
+          .from("payments")
+          .select("client_id, clients(full_name)")
+          .in("client_id", form.clientIds)
+          .eq("category_id", chk.catId)
+          .eq("reference_month", form.referenceMonth);
+        if (jaPagos && jaPagos.length > 0) {
+          const nomes = Array.from(
+            new Set(jaPagos.map((r) => (r.clients as { full_name: string } | null)?.full_name ?? "cliente")),
+          ).join(", ");
+          const ok = await confirm(
+            `${nomes} já tem ${chk.label} de ${shortMonthRef(form.referenceMonth)} lançado(a). Lançar de novo?`,
+          );
+          if (!ok) return;
+        }
       }
     }
     if (submitCatNorm === "mensalista" && form.accountDirection === "credito" && !form.method) {
@@ -892,6 +906,26 @@ function CaixaPage() {
       rows = [buildInsertPayload(form, single)];
     }
 
+    // Mensalidade da Escolinha Pickleball paga junto com o Play: o Play vira
+    // um lançamento à parte (categoria Play Pickleball, pagamento direto), pra
+    // a mensalidade continuar abatendo só o débito dela e o Play contar como
+    // pacote do mês.
+    if (form.includePlay && playCategoryId && isEscolinhaCategory(submitCatNorm) && form.referenceMonth) {
+      const playPrice = Number(categories.find((c) => c.id === playCategoryId)?.default_amount) || 80;
+      for (const cid of form.clientIds) {
+        rows.push({
+          ...buildInsertPayload(form, cid, playPrice),
+          category_id: playCategoryId,
+          amount: playPrice,
+          received: true,
+          to_account: false,
+          account_direction: null,
+          notes: `Play pickleball (${PLAYS_PER_MONTH} plays) — pago junto com a mensalidade`,
+          reference_month: form.referenceMonth,
+        });
+      }
+    }
+
     if (debtToReceive > 0 && debtCreditCatId) {
       rows.push({
         client_id: form.clientIds[0],
@@ -923,7 +957,7 @@ function CaixaPage() {
     const { data: inserted, error } = await supabase
       .from("payments")
       .insert(rows.map((r) => ({ ...r, recorded_by: recorderId })))
-      .select("id, amount, client_id, received");
+      .select("id, amount, client_id, received, category_id");
     setSubmitting(false);
     if (error) {
       toast.error(error.message);
@@ -1009,6 +1043,8 @@ function CaixaPage() {
         const receivedByClient = new Map<string, boolean>();
         for (const p of inserted) {
           if (!p.client_id) continue;
+          // O Play pago junto não entra no valor da mensagem da mensalidade.
+          if (form.includePlay && playCategoryId && p.category_id === playCategoryId && p.category_id !== form.categoryId) continue;
           byClient.set(p.client_id, (byClient.get(p.client_id) ?? 0) + (Number(p.amount) || 0));
           receivedByClient.set(p.client_id, (receivedByClient.get(p.client_id) ?? true) && !!p.received);
         }
@@ -1065,6 +1101,7 @@ function CaixaPage() {
       quantity: String((p as PaymentRow & { quantity?: number | null }).quantity ?? 1),
       isPendingPayment: (p as PaymentRow & { is_pending_payment?: boolean | null }).is_pending_payment ?? false,
       referenceMonth: p.reference_month ?? "",
+      includePlay: false,
     });
 
     setEditAmountManuallyEdited(true); // don't overwrite existing amount when opening edit
@@ -1179,7 +1216,7 @@ function CaixaPage() {
       return;
     }
     if (
-      isEscolinhaCategory(normalizeCategoryName(categories.find((c) => c.id === editForm.categoryId)?.name)) &&
+      hasReferenceMonth(normalizeCategoryName(categories.find((c) => c.id === editForm.categoryId)?.name)) &&
       !editForm.referenceMonth
     ) {
       toast.error("Escolha o mês da mensalidade.");
@@ -1385,7 +1422,7 @@ function CaixaPage() {
       "tenis de mesa (mensalista)",
       "terno de bola",
       "credito gympass",
-    ].includes(fCatNorm) || isStockCat || isMensalistaCredito || isEstorno || isEscolinhaCategory(fCatNorm);
+    ].includes(fCatNorm) || isStockCat || isMensalistaCredito || isEstorno || hasReferenceMonth(fCatNorm);
     return (
       <div className="space-y-4">
         {isCreate ? (
@@ -1653,8 +1690,19 @@ function CaixaPage() {
                 // pagamento entra como crédito que abate.
                 patch.accountDirection = "credito";
                 patch.received = true;
+              } else if (isPlayPickleballCategory(norm)) {
+                // Play é pagamento direto (não passa pela conta).
+                if (!f.referenceMonth) patch.referenceMonth = currentMonthRef();
+                patch.court = "";
+                patch.startTime = "";
+                patch.endTime = "";
+                patch.accountDirection = "";
+                patch.received = true;
+                patch.includePlay = false;
+                if (!f.amount) patch.amount = String(Number(cat?.default_amount) || 80);
               } else {
                 patch.referenceMonth = "";
+                patch.includePlay = false;
               }
               if (!stillCommissionable) patch.isNewPlanSale = false;
               if (norm === "credito gympass") patch.accountDirection = "credito";
@@ -1688,10 +1736,11 @@ function CaixaPage() {
           </Select>
         </div>
 
-        {isEscolinhaCategory(fCatNorm) && (
+        {hasReferenceMonth(fCatNorm) && (
           <div className="space-y-2 rounded-md border border-primary/40 bg-primary/5 p-3">
             <Label>
-              Mensalidade referente a <span className="text-destructive">*</span>
+              {isPlayPickleballCategory(fCatNorm) ? "Play referente a" : "Mensalidade referente a"}{" "}
+              <span className="text-destructive">*</span>
             </Label>
             <Select value={f.referenceMonth || undefined} onValueChange={(v) => update({ referenceMonth: v })}>
               <SelectTrigger>
@@ -1706,10 +1755,27 @@ function CaixaPage() {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Entra como crédito na conta e abate a mensalidade gerada do mês (Turmas → Gerar
-              mensalidades). Saldo zerado = mês quitado.{" "}
+              {isPlayPickleballCategory(fCatNorm)
+                ? `Dá ${PLAYS_PER_MONTH} plays no mês escolhido (não acumulam). O uso é marcado no mapa, em "Play pickleball".`
+                : "Entra como crédito na conta e abate a mensalidade gerada do mês (Turmas → Gerar mensalidades). Saldo zerado = mês quitado."}{" "}
               Se o mesmo mês já tiver sido lançado, o sistema avisa.
             </p>
+            {isCreate && isEscolinhaCategory(fCatNorm) && fCatNorm.includes("pickle") && playCategoryId && (
+              <label className="flex items-start gap-2 text-sm">
+                <Checkbox
+                  className="mt-0.5"
+                  checked={f.includePlay}
+                  onCheckedChange={(v) => update({ includePlay: v === true })}
+                />
+                <span>
+                  Inclui Play do mês (+{fmtBRL(Number(categories.find((c) => c.id === playCategoryId)?.default_amount) || 80)})
+                  <span className="block text-xs text-muted-foreground">
+                    {PLAYS_PER_MONTH} plays no mês. Sai como um lançamento à parte do Play, na mesma
+                    forma de pagamento.
+                  </span>
+                </span>
+              </label>
+            )}
           </div>
         )}
 
