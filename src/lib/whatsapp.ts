@@ -311,10 +311,11 @@ async function buildNotificationMessage(params: NotifyParams): Promise<
       ? escolinhaLabel(clientCatName)
       : null);
 
-  // Mensalidade é recibo, não extrato: só mostra o saldo da conta quando a
-  // mensalidade foi lançada como débito na conta (cobrança em aberto).
+  // Mensalidade paga direto (sem passar pela conta) é recibo: sem saldo.
+  // Se passou pela conta (débito da mensalidade gerado em Turmas e o
+  // pagamento como crédito), o saldo mostra se o mês ficou quitado.
   let saldoBlock: string;
-  if (escolinha && accountDirection !== "debito") {
+  if (escolinha && !accountDirection) {
     saldoBlock = "";
   } else if (responsibleId && responsibleFullName) {
     const family = await getFamilyBalances(responsibleId, responsibleFullName);
