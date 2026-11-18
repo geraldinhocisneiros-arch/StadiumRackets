@@ -332,6 +332,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
         amount: payload.amount,
         accountDirection: payload.account_direction,
         categoryName: cat?.name ?? null,
+        received: payload.received,
       });
     }
   };

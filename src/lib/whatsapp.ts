@@ -101,6 +101,28 @@ interface NotifyParams {
   startTime?: string | null;
   /** Nome da categoria do pagamento (ex: estorno). */
   categoryName?: string | null;
+  /** Se o pagamento já foi recebido (pagamento direto, fora da conta corrente). */
+  received?: boolean | null;
+}
+
+function normCat(name: string | null | undefined): string {
+  return (name ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * "Escolinha Tenis" → "Escolinha de Tênis", "Escolinha Pickleball" →
+ * "Escolinha de Pickleball". Null se a categoria não for de escolinha.
+ */
+export function escolinhaLabel(categoryName: string | null | undefined): string | null {
+  const n = normCat(categoryName);
+  if (!n.startsWith("escolinha")) return null;
+  if (n.includes("tenis")) return "Escolinha de Tênis";
+  if (n.includes("pickle")) return "Escolinha de Pickleball";
+  return "Escolinha";
 }
 
 /**
@@ -229,11 +251,11 @@ async function buildNotificationMessage(params: NotifyParams): Promise<
     }
   | { error: string }
 > {
-  const { clientId, amount, accountDirection, paidAt, startTime, categoryName } = params;
+  const { clientId, amount, accountDirection, paidAt, startTime, categoryName, received } = params;
 
   const { data: client } = await supabase
     .from("clients")
-    .select("full_name, phone, financial_responsible")
+    .select("full_name, phone, financial_responsible, client_categories(name)")
     .eq("id", clientId)
     .maybeSingle();
 
@@ -277,8 +299,25 @@ async function buildNotificationMessage(params: NotifyParams): Promise<
     }
   }
 
+  // Mensalidade de escolinha: lançamento na categoria Escolinha, ou cliente
+  // de escolinha com lançamento "Mensalista" (ou sem categoria) que não é
+  // de quadra — é assim que a recepção lança a mensalidade dos alunos.
+  const clientCatName =
+    (client as { client_categories?: { name: string } | null }).client_categories?.name ?? null;
+  const payCat = normCat(categoryName);
+  const escolinha =
+    escolinhaLabel(categoryName) ??
+    ((payCat === "" || payCat === "mensalista") && !startTime
+      ? escolinhaLabel(clientCatName)
+      : null);
+
+  // Mensalidade paga direto (sem passar pela conta) é recibo: sem saldo.
+  // Se passou pela conta (débito da mensalidade gerado em Turmas e o
+  // pagamento como crédito), o saldo mostra se o mês ficou quitado.
   let saldoBlock: string;
-  if (responsibleId && responsibleFullName) {
+  if (escolinha && !accountDirection) {
+    saldoBlock = "";
+  } else if (responsibleId && responsibleFullName) {
     const family = await getFamilyBalances(responsibleId, responsibleFullName);
     saldoBlock = formatFamilyBlock(
       family,
@@ -302,7 +341,7 @@ async function buildNotificationMessage(params: NotifyParams): Promise<
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
-  const isEstorno = catNorm === "estorno";
+  const isEstorno = catNorm === "estorno" && !escolinha;
 
   const tipo = isEstorno
     ? "estorno"
@@ -320,6 +359,9 @@ async function buildNotificationMessage(params: NotifyParams): Promise<
     const d = new Date(paidAt);
     if (!Number.isNaN(d.getTime())) {
       const dia = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Recife" }).format(d);
+      if (escolinha) {
+        quandoLinha = `*Data:* ${dia}`;
+      }
       const horaSlot = startTime
         ? startTime.length >= 5
           ? startTime.slice(0, 5)
@@ -332,12 +374,19 @@ async function buildNotificationMessage(params: NotifyParams): Promise<
           minute: "2-digit",
           timeZone: "America/Recife",
         }).format(d);
-      quandoLinha = `*Data:* ${dia} às *${hora}*`;
+      if (!escolinha) quandoLinha = `*Data:* ${dia} às *${hora}*`;
     }
   }
 
-  const linhaLancamento =
-    combinedCount > 1
+  const deQuem = dependentFirstName ? ` de ${dependentFirstName}` : "";
+  const mensalidade = `*mensalidade da ${escolinha}*${deQuem}`;
+  const linhaLancamento = escolinha
+    ? accountDirection === "debito"
+      ? `Lançamos a ${mensalidade} no valor de *${fmtBRL(displayAmount)}* ${contaRef}.`
+      : received === false && accountDirection !== "credito"
+        ? `Registramos a ${mensalidade} no valor de *${fmtBRL(displayAmount)}*, ainda *em aberto*.`
+        : `Recebemos o pagamento de *${fmtBRL(displayAmount)}* referente à ${mensalidade}.`
+    : combinedCount > 1
       ? `Realizamos ${combinedCount} ${tipo}s totalizando *${fmtBRL(displayAmount)}* ${contaRef} referentes à utilização da quadra.`
       : `Realizamos o ${tipo} de *${fmtBRL(displayAmount)}* ${contaRef} referente à utilização da quadra.`;
 
@@ -351,7 +400,7 @@ async function buildNotificationMessage(params: NotifyParams): Promise<
     `${intro}\n\n` +
     `${linhaLancamento}\n` +
     (quandoLinha ? `${quandoLinha}\n` : "") +
-    `\n${saldoBlock}\n\n` +
+    (saldoBlock ? `\n${saldoBlock}\n\n` : "\n") +
     (debtReminder ? `${debtReminder}\n\n` : "") +
     `Qualquer dúvida estamos à disposição. Obrigado!`;
 
