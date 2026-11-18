@@ -3612,6 +3612,24 @@ export type Database = {
           status: string
         }[]
       }
+      tennis_school_fee_preview: {
+        Args: { _month: string }
+        Returns: {
+          amount: number
+          classes: string
+          client_id: string
+          from_category: boolean
+          full_name: string
+          status: string
+        }[]
+      }
+      tennis_school_generate_fees: {
+        Args: { _month: string }
+        Returns: {
+          generated: number
+          total: number
+        }[]
+      }
       pickleball_class_generate_fees: {
         Args: { _month: string }
         Returns: {

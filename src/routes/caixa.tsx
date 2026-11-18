@@ -24,7 +24,7 @@ import { fmtBRL, fmtDateTime, todayISO, normalizeText, dateISOInRecife, recifeDa
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { offerWhatsAppPaymentNotification, sendWhatsAppPaymentNotification } from "@/lib/whatsapp";
-import { isEscolinhaCategory, isEscolinhaPickleballCategory, mensalidadeMonthOptions, currentMonthRef, shortMonthRef } from "@/lib/mensalidade";
+import { isEscolinhaCategory, mensalidadeMonthOptions, currentMonthRef, shortMonthRef } from "@/lib/mensalidade";
 import { Plus, Loader2, UserPlus, Pencil, CalendarIcon, Printer, Trash2, X, Paperclip, MessageCircle } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -644,7 +644,7 @@ function CaixaPage() {
 
   // Mensalidade da escolinha: a categoria costuma vir preenchida pelo
   // cadastro do cliente (sem passar pelo seletor), então o mês e o crédito
-  // em conta do pickleball são ajustados aqui também.
+  // em conta são ajustados aqui também.
   useEffect(() => {
     const norm = normalizeCategoryName(categories.find((c) => c.id === form.categoryId)?.name);
     if (!isEscolinhaCategory(norm) || form.referenceMonth) return;
@@ -654,7 +654,8 @@ function CaixaPage() {
       court: "",
       startTime: "",
       endTime: "",
-      ...(isEscolinhaPickleballCategory(norm) ? { accountDirection: "credito" as const, received: true } : {}),
+      accountDirection: "credito",
+      received: true,
     }));
   }, [form.categoryId, form.referenceMonth, categories]);
 
@@ -1648,12 +1649,10 @@ function CaixaPage() {
                 patch.court = "";
                 patch.startTime = "";
                 patch.endTime = "";
-                // Pickleball: a mensalidade é débito na conta (Gerar
-                // mensalidades) e o pagamento entra como crédito que abate.
-                if (isEscolinhaPickleballCategory(norm)) {
-                  patch.accountDirection = "credito";
-                  patch.received = true;
-                }
+                // A mensalidade é débito na conta (Gerar mensalidades) e o
+                // pagamento entra como crédito que abate.
+                patch.accountDirection = "credito";
+                patch.received = true;
               } else {
                 patch.referenceMonth = "";
               }
@@ -1707,9 +1706,8 @@ function CaixaPage() {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              {isEscolinhaPickleballCategory(fCatNorm)
-                ? "Entra como crédito na conta e abate a mensalidade gerada do mês (Turmas → Gerar mensalidades). Saldo zerado = mês quitado."
-                : "Fica registrado que este mês está pago."}{" "}
+              Entra como crédito na conta e abate a mensalidade gerada do mês (Turmas → Gerar
+              mensalidades). Saldo zerado = mês quitado.{" "}
               Se o mesmo mês já tiver sido lançado, o sistema avisa.
             </p>
           </div>

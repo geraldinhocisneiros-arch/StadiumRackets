@@ -21,13 +21,10 @@ const MONTHS = [
 /** Recebe o nome da categoria já normalizado (sem acento, minúsculo). */
 export const isEscolinhaCategory = (catNorm: string): boolean => catNorm.startsWith("escolinha");
 
-/**
- * Escolinha Pickleball: a mensalidade é gerada como débito na conta
- * (Turmas → Gerar mensalidades), então o pagamento entra como CRÉDITO na
- * conta e abate o débito. Escolinha Tênis não tem gerador: pagamento direto.
+/*
+ * Tênis e pickleball funcionam igual: "Gerar mensalidades" lança o débito do
+ * mês na conta e o pagamento no Caixa entra como CRÉDITO que abate.
  */
-export const isEscolinhaPickleballCategory = (catNorm: string): boolean =>
-  isEscolinhaCategory(catNorm) && catNorm.includes("pickle");
 
 const ref = (y: number, m: number) => `${y}-${String(m).padStart(2, "0")}-01`;
 
