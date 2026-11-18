@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { fmtBRL, fmtDate } from "@/lib/format";
+import { longMonthRef } from "@/lib/mensalidade";
 import { buildOpenDebtReminder } from "@/lib/open-debt";
 import { courtLongLabel, courtShort } from "@/lib/court-map";
 
@@ -103,6 +104,8 @@ interface NotifyParams {
   categoryName?: string | null;
   /** Se o pagamento já foi recebido (pagamento direto, fora da conta corrente). */
   received?: boolean | null;
+  /** Mês da mensalidade da escolinha ("2026-11-01"). */
+  referenceMonth?: string | null;
 }
 
 function normCat(name: string | null | undefined): string {
@@ -251,7 +254,8 @@ async function buildNotificationMessage(params: NotifyParams): Promise<
     }
   | { error: string }
 > {
-  const { clientId, amount, accountDirection, paidAt, startTime, categoryName, received } = params;
+  const { clientId, amount, accountDirection, paidAt, startTime, categoryName, received, referenceMonth } =
+    params;
 
   const { data: client } = await supabase
     .from("clients")
@@ -379,7 +383,8 @@ async function buildNotificationMessage(params: NotifyParams): Promise<
   }
 
   const deQuem = dependentFirstName ? ` de ${dependentFirstName}` : "";
-  const mensalidade = `*mensalidade da ${escolinha}*${deQuem}`;
+  const mesRef = referenceMonth ? ` de ${longMonthRef(referenceMonth)}` : "";
+  const mensalidade = `*mensalidade${mesRef} da ${escolinha}*${deQuem}`;
   const linhaLancamento = escolinha
     ? accountDirection === "debito"
       ? `Lançamos a ${mensalidade} no valor de *${fmtBRL(displayAmount)}* ${contaRef}.`

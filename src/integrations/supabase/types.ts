@@ -2073,6 +2073,7 @@ export type Database = {
           quantity: number
           received: boolean
           recorded_by: string | null
+          reference_month: string | null
           start_time: string | null
           to_account: boolean
           updated_at: string | null
@@ -2100,6 +2101,7 @@ export type Database = {
           quantity?: number
           received?: boolean
           recorded_by?: string | null
+          reference_month?: string | null
           start_time?: string | null
           to_account?: boolean
           updated_at?: string | null
@@ -2127,6 +2129,7 @@ export type Database = {
           quantity?: number
           received?: boolean
           recorded_by?: string | null
+          reference_month?: string | null
           start_time?: string | null
           to_account?: boolean
           updated_at?: string | null
@@ -3604,6 +3607,7 @@ export type Database = {
           amount: number
           classes: string
           client_id: string
+          from_category: boolean
           full_name: string
           status: string
         }[]

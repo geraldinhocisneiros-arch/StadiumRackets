@@ -24,6 +24,7 @@ import { fmtBRL, fmtDateTime, todayISO, normalizeText, dateISOInRecife, recifeDa
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { offerWhatsAppPaymentNotification, sendWhatsAppPaymentNotification } from "@/lib/whatsapp";
+import { isEscolinhaCategory, isEscolinhaPickleballCategory, mensalidadeMonthOptions, currentMonthRef, shortMonthRef } from "@/lib/mensalidade";
 import { Plus, Loader2, UserPlus, Pencil, CalendarIcon, Printer, Trash2, X, Paperclip, MessageCircle } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -97,6 +98,7 @@ interface PaymentRow {
   updated_at: string | null;
   recorded_by: string | null;
   is_new_plan_sale?: boolean;
+  reference_month?: string | null;
   clients: { full_name: string; category_id?: string | null } | null;
   profiles: { full_name: string } | null;
   updater: { full_name: string } | null;
@@ -135,6 +137,8 @@ interface FormState {
   commissionUserId: string;
   quantity: string;
   isPendingPayment: boolean;
+  /** Mês da mensalidade da escolinha ("2026-11-01"); vazio nas demais categorias. */
+  referenceMonth: string;
 }
 
 const emptyForm = (): FormState => ({
@@ -156,6 +160,7 @@ const emptyForm = (): FormState => ({
   commissionUserId: "",
   quantity: "1",
   isPendingPayment: false,
+  referenceMonth: "",
 });
 
 
@@ -441,7 +446,7 @@ function CaixaPage() {
       // por isso fetchAll pagina em blocos de 1000 até trazer tudo.
       const paymentsData = await fetchAll<Omit<PaymentRow, "profiles" | "updater"> & { recorded_by: string | null; updated_by: string | null }>(
         "payments",
-        "id, client_id, category_id, amount, passthrough_amount, method, paid_at, start_time, end_time, court, received, to_account, account_direction, notes, recorded_by, updated_by, updated_at, is_new_plan_sale, commission_user_id, clients(full_name, category_id)",
+        "id, client_id, category_id, amount, passthrough_amount, method, paid_at, start_time, end_time, court, received, to_account, account_direction, notes, recorded_by, updated_by, updated_at, is_new_plan_sale, commission_user_id, reference_month, clients(full_name, category_id)",
         {
           build: (q) =>
             q.gte("paid_at", startOfDay).lt("paid_at", endOfDay).order("paid_at", { ascending: false }),
@@ -637,6 +642,22 @@ function CaixaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.clientIds, form.categoryId, form.accountDirection, amountManuallyEdited, clients, categories]);
 
+  // Mensalidade da escolinha: a categoria costuma vir preenchida pelo
+  // cadastro do cliente (sem passar pelo seletor), então o mês e o crédito
+  // em conta do pickleball são ajustados aqui também.
+  useEffect(() => {
+    const norm = normalizeCategoryName(categories.find((c) => c.id === form.categoryId)?.name);
+    if (!isEscolinhaCategory(norm) || form.referenceMonth) return;
+    setForm((f) => ({
+      ...f,
+      referenceMonth: currentMonthRef(),
+      court: "",
+      startTime: "",
+      endTime: "",
+      ...(isEscolinhaPickleballCategory(norm) ? { accountDirection: "credito" as const, received: true } : {}),
+    }));
+  }, [form.categoryId, form.referenceMonth, categories]);
+
   // Auto-fill amount from price table (create form) — débito da C/C OU categoria "Avulso"
   useEffect(() => {
     if (amountManuallyEdited) return;
@@ -753,6 +774,7 @@ function CaixaPage() {
         !isEstorno && f.isNewPlanSale ? f.commissionUserId || user?.id || null : null,
       quantity: isStockCat ? Math.max(1, parseInt(f.quantity, 10) || 1) : 1,
       is_pending_payment: isStockCat ? f.isPendingPayment : false,
+      reference_month: isEscolinhaCategory(catNorm) ? f.referenceMonth || null : null,
     };
 
   };
@@ -793,6 +815,30 @@ function CaixaPage() {
     const submitCatNorm = normalizeCategoryName(submitCat?.name);
     if (submitCatNorm === "estorno") {
       setForm((f) => ({ ...f, amount: "", method: "", court: "", startTime: "", endTime: "", received: true, accountDirection: "credito", isNewPlanSale: false }));
+    }
+    if (isEscolinhaCategory(submitCatNorm)) {
+      if (!form.referenceMonth) {
+        toast.error("Escolha o mês da mensalidade.");
+        return;
+      }
+      if (form.received && !form.method) {
+        toast.error("Escolha a forma de pagamento da mensalidade.");
+        return;
+      }
+      const { data: jaPagos } = await supabase
+        .from("payments")
+        .select("client_id, clients(full_name)")
+        .in("client_id", form.clientIds)
+        .eq("reference_month", form.referenceMonth);
+      if (jaPagos && jaPagos.length > 0) {
+        const nomes = Array.from(
+          new Set(jaPagos.map((r) => (r.clients as { full_name: string } | null)?.full_name ?? "cliente")),
+        ).join(", ");
+        const ok = await confirm(
+          `${nomes} já tem mensalidade de ${shortMonthRef(form.referenceMonth)} lançada. Lançar de novo?`,
+        );
+        if (!ok) return;
+      }
     }
     if (submitCatNorm === "mensalista" && form.accountDirection === "credito" && !form.method) {
       toast.error("Mensalista com Crédito exige uma forma de pagamento.");
@@ -864,6 +910,7 @@ function CaixaPage() {
         commission_user_id: null,
         quantity: 1,
         is_pending_payment: false,
+        reference_month: null,
       });
     }
 
@@ -983,6 +1030,7 @@ function CaixaPage() {
               startTime: form.startTime || null,
               categoryName: catName,
               received: receivedByClient.get(clientId) ?? null,
+              referenceMonth: isEscolinhaCategory(normalizeCategoryName(catName)) ? form.referenceMonth || null : null,
             },
             (cid) => markClientNotified(cid),
           );
@@ -1015,6 +1063,7 @@ function CaixaPage() {
         "",
       quantity: String((p as PaymentRow & { quantity?: number | null }).quantity ?? 1),
       isPendingPayment: (p as PaymentRow & { is_pending_payment?: boolean | null }).is_pending_payment ?? false,
+      referenceMonth: p.reference_month ?? "",
     });
 
     setEditAmountManuallyEdited(true); // don't overwrite existing amount when opening edit
@@ -1126,6 +1175,13 @@ function CaixaPage() {
     if (!editingId || !user) return;
     if (!editForm.clientId) {
       toast.error("Selecione um cliente.");
+      return;
+    }
+    if (
+      isEscolinhaCategory(normalizeCategoryName(categories.find((c) => c.id === editForm.categoryId)?.name)) &&
+      !editForm.referenceMonth
+    ) {
+      toast.error("Escolha o mês da mensalidade.");
       return;
     }
     if (!editForm.categoryId) {
@@ -1328,7 +1384,7 @@ function CaixaPage() {
       "tenis de mesa (mensalista)",
       "terno de bola",
       "credito gympass",
-    ].includes(fCatNorm) || isStockCat || isMensalistaCredito || isEstorno;
+    ].includes(fCatNorm) || isStockCat || isMensalistaCredito || isEstorno || isEscolinhaCategory(fCatNorm);
     return (
       <div className="space-y-4">
         {isCreate ? (
@@ -1587,6 +1643,20 @@ function CaixaPage() {
               const norm = normalizeCategoryName(cat?.name);
               const stillCommissionable = norm === "mensalista";
               const patch: Partial<FormState> = { categoryId: newCatId };
+              if (isEscolinhaCategory(norm)) {
+                if (!f.referenceMonth) patch.referenceMonth = currentMonthRef();
+                patch.court = "";
+                patch.startTime = "";
+                patch.endTime = "";
+                // Pickleball: a mensalidade é débito na conta (Gerar
+                // mensalidades) e o pagamento entra como crédito que abate.
+                if (isEscolinhaPickleballCategory(norm)) {
+                  patch.accountDirection = "credito";
+                  patch.received = true;
+                }
+              } else {
+                patch.referenceMonth = "";
+              }
               if (!stillCommissionable) patch.isNewPlanSale = false;
               if (norm === "credito gympass") patch.accountDirection = "credito";
               if (norm !== "credito gympass") patch.passthroughAmount = "";
@@ -1618,6 +1688,32 @@ function CaixaPage() {
             </SelectContent>
           </Select>
         </div>
+
+        {isEscolinhaCategory(fCatNorm) && (
+          <div className="space-y-2 rounded-md border border-primary/40 bg-primary/5 p-3">
+            <Label>
+              Mensalidade referente a <span className="text-destructive">*</span>
+            </Label>
+            <Select value={f.referenceMonth || undefined} onValueChange={(v) => update({ referenceMonth: v })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Escolha o mês" />
+              </SelectTrigger>
+              <SelectContent>
+                {mensalidadeMonthOptions(f.referenceMonth).map(([v, l]) => (
+                  <SelectItem key={v} value={v}>
+                    {l}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {isEscolinhaPickleballCategory(fCatNorm)
+                ? "Entra como crédito na conta e abate a mensalidade gerada do mês (Turmas → Gerar mensalidades). Saldo zerado = mês quitado."
+                : "Fica registrado que este mês está pago."}{" "}
+              Se o mesmo mês já tiver sido lançado, o sistema avisa.
+            </p>
+          </div>
+        )}
 
         {isCreate && canOfferReceiveDebt(f) && (
           <ReceiveOpenDebtOption
@@ -2232,6 +2328,11 @@ function CaixaPage() {
                           return (
                             <div className="flex items-center gap-1.5">
                               {name ?? <span className="text-muted-foreground">—</span>}
+                              {p.reference_month && (
+                                <Badge variant="outline" title="Mensalidade referente a este mês">
+                                  {shortMonthRef(p.reference_month)}
+                                </Badge>
+                              )}
                             </div>
                           );
                         })()}
