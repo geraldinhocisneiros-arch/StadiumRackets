@@ -26,7 +26,7 @@ import { useConfirm } from "@/hooks/useConfirm";
 import { offerWhatsAppPaymentNotification, sendWhatsAppPaymentNotification } from "@/lib/whatsapp";
 import { isEscolinhaCategory, hasReferenceMonth, mensalidadeMonthOptions, currentMonthRef, shortMonthRef } from "@/lib/mensalidade";
 import { isPlayPickleballCategory, PLAYS_PER_MONTH } from "@/lib/play-pickleball";
-import { Plus, Loader2, UserPlus, Pencil, CalendarIcon, Printer, Trash2, X, Paperclip, MessageCircle } from "lucide-react";
+import { Plus, Loader2, UserPlus, Pencil, CalendarIcon, Printer, Trash2, X, Paperclip, MessageCircle, HandCoins } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -46,6 +46,8 @@ import {
   OPEN_DEBT_SETTLEMENT_NOTE,
   receiveOpenDebtAmount,
   type ReceiveOpenDebtValue,
+  fetchOpenDebtByClient,
+  insertOpenDebtSettlement,
 } from "@/lib/open-debt";
 import {
   PAYMENT_METHOD_LABELS as METHOD_LABELS,
@@ -195,6 +197,13 @@ function CaixaPage() {
   const [amountManuallyEdited, setAmountManuallyEdited] = useState(false);
   const [editAmountManuallyEdited, setEditAmountManuallyEdited] = useState(false);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
+  // Débito em aberto de cada cliente que tem débito na conta na lista — é o
+  // que o botão "Receber" pode quitar.
+  const [openDebtByClient, setOpenDebtByClient] = useState<Record<string, number>>({});
+  const [receiveFor, setReceiveFor] = useState<PaymentRow | null>(null);
+  const [receiveAmount, setReceiveAmount] = useState("");
+  const [receiveMethod, setReceiveMethod] = useState("");
+  const [receiving, setReceiving] = useState(false);
   const [extraEntries, setExtraEntries] = useState<PaymentRow[]>([]);
   const [paymentsWithReceipt, setPaymentsWithReceipt] = useState<Set<string>>(new Set());
   const [receiptPathsByPayment, setReceiptPathsByPayment] = useState<Record<string, string>>({});
@@ -487,6 +496,18 @@ function CaixaPage() {
       updater: p.updated_by ? profilesMap[p.updated_by] ?? null : null,
     }));
     setPayments(enriched);
+    {
+      const debtClientIds = Array.from(
+        new Set(
+          enriched
+            .filter((p) => p.client_id && p.account_direction === "debito" && !p.received)
+            .map((p) => p.client_id as string),
+        ),
+      );
+      void fetchOpenDebtByClient(debtClientIds).then((m) =>
+        setOpenDebtByClient(Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v.debt]))),
+      );
+    }
     // Carregar quais pagamentos possuem comprovante anexado
     if (paymentIds.length > 0) {
       const setIds = new Set<string>();
@@ -764,7 +785,11 @@ function CaixaPage() {
       start_time: isEstorno ? null : f.startTime || null,
       end_time: isEstorno ? null : f.endTime || null,
       court: isEstorno ? null : f.court ? Number(f.court) : null,
-      received: isRanking
+      // Débito na conta não é dinheiro recebido: o pagamento do cliente entra
+      // depois como crédito (botão "Receber" na linha).
+      received: !isEstorno && !isAutoCCPayload && f.accountDirection === "debito"
+        ? false
+        : isRanking
         ? f.received
         : finalAmount === 0
           ? true
@@ -1276,6 +1301,32 @@ function CaixaPage() {
       restoreScrollPosition(scrollYBeforeSave);
       loadAll(filterDate, dateMode, { silent: true, preserveScrollY: scrollYBeforeSave });
     }
+  };
+
+  // Cliente pagou um débito na conta: lança o crédito (quitação) com a forma
+  // de pagamento real. A linha do débito continua como está — é o crédito
+  // que zera a conta e que entra no caixa do dia.
+  const handleReceive = async () => {
+    if (!receiveFor?.client_id) return;
+    const amount = Math.round((Number(receiveAmount.replace(",", ".")) || 0) * 100) / 100;
+    if (amount <= 0) return toast.error("Informe o valor recebido.");
+    if (!receiveMethod) return toast.error("Escolha a forma de pagamento.");
+    setReceiving(true);
+    const { error } = await insertOpenDebtSettlement({
+      clientId: receiveFor.client_id,
+      amount,
+      method: receiveMethod,
+    });
+    setReceiving(false);
+    if (error) return toast.error(error);
+    toast.success(`Recebido ${fmtBRL(amount)} de ${receiveFor.clients?.full_name ?? "cliente"}`);
+    const cid = receiveFor.client_id;
+    setReceiveFor(null);
+    void offerWhatsAppPaymentNotification(
+      { clientId: cid, amount, accountDirection: "credito", paidAt: new Date().toISOString() },
+      (c) => markClientNotified(c),
+    );
+    void loadAll(undefined, undefined, { silent: true, preserveScrollY: window.scrollY });
   };
 
   const handleDelete = async (id: string) => {
@@ -2051,10 +2102,13 @@ function CaixaPage() {
           return (
             <div className="space-y-2">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className={`flex items-center gap-2 rounded-md border p-3 ${isEstornoAccount || isAutoCC ? "opacity-50" : ""}`}>
+                <div
+                  className={`flex items-center gap-2 rounded-md border p-3 ${isEstornoAccount || isAutoCC || f.accountDirection === "debito" ? "opacity-50" : ""}`}
+                  title={f.accountDirection === "debito" ? "Débito na conta não é recebimento. Quando o cliente pagar, use \"Receber\" na linha do lançamento." : undefined}
+                >
                   <Checkbox
-                    disabled={isEstornoAccount || isAutoCC}
-                    checked={!isEstornoAccount && !isAutoCC && f.received}
+                    disabled={isEstornoAccount || isAutoCC || f.accountDirection === "debito"}
+                    checked={!isEstornoAccount && !isAutoCC && f.accountDirection !== "debito" && f.received}
                     onCheckedChange={(v) => update({ received: v === true })}
                   />
                   <Label className="cursor-pointer font-normal">Pagamento recebido</Label>
@@ -2091,7 +2145,9 @@ function CaixaPage() {
                     onCheckedChange={(v) => {
                       const next = v === true ? "debito" : "";
                       if (next === "debito" && fCatNorm === "mensalista") {
-                        update({ accountDirection: next, method: "" });
+                        update({ accountDirection: next, method: "", received: false });
+                      } else if (next === "debito") {
+                        update({ accountDirection: next, received: false });
                       } else {
                         update({ accountDirection: next });
                       }
@@ -2100,6 +2156,12 @@ function CaixaPage() {
                   <Label className="cursor-pointer font-normal text-center leading-tight">Debitar da<br />C/C</Label>
                 </div>
               </div>
+              {f.accountDirection === "debito" && (
+                <p className="text-xs text-muted-foreground">
+                  Débito na conta fica em aberto na conta do cliente — não é recebimento. Quando ele
+                  pagar, use o botão <strong>Receber</strong> na linha do lançamento.
+                </p>
+              )}
               {!eligible && (
                 <p className="text-xs text-muted-foreground">
                   Crédito/Débito em conta corrente disponível apenas para categorias <strong>Mensalista</strong>, <strong>Débito avulso</strong>, <strong>Saldo anterior</strong> ou <strong>crédito GYMPASS</strong>.
@@ -2529,6 +2591,24 @@ function CaixaPage() {
                               <MessageCircle className="h-4 w-4 text-green-600" />
                             </Button>
                           )}
+                          {p.client_id &&
+                            p.account_direction === "debito" &&
+                            !p.received &&
+                            (openDebtByClient[p.client_id] ?? 0) > 0 && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                title="Receber (cliente pagou este débito)"
+                                onClick={() => {
+                                  const debt = openDebtByClient[p.client_id as string] ?? 0;
+                                  setReceiveFor(p);
+                                  setReceiveAmount(Math.min(Number(p.amount) || 0, debt).toFixed(2));
+                                  setReceiveMethod("");
+                                }}
+                              >
+                                <HandCoins className="h-4 w-4 text-emerald-600" />
+                              </Button>
+                            )}
                           <Button size="icon" variant="ghost" onClick={() => openEdit(p)}>
                             <Pencil className="h-4 w-4" />
                           </Button>
@@ -2592,6 +2672,55 @@ function CaixaPage() {
       </Card>
 
       {/* Edit dialog */}
+      <Dialog open={!!receiveFor} onOpenChange={(o) => !o && setReceiveFor(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Receber débito</DialogTitle>
+          </DialogHeader>
+          {receiveFor && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                {receiveFor.clients?.full_name ?? "Cliente"} tem{" "}
+                <strong>{fmtBRL(openDebtByClient[receiveFor.client_id ?? ""] ?? 0)}</strong> em aberto
+                na conta. O valor recebido entra como crédito na conta e no caixa de hoje.
+              </p>
+              <div className="space-y-1">
+                <Label>Valor recebido (R$)</Label>
+                <Input
+                  inputMode="decimal"
+                  value={receiveAmount}
+                  onChange={(e) => setReceiveAmount(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Forma de pagamento</Label>
+                <Select value={receiveMethod || undefined} onValueChange={setReceiveMethod}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {METHOD_OPTIONS.map(([v, l]) => (
+                      <SelectItem key={v} value={v}>
+                        {l}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setReceiveFor(null)}>
+                  Cancelar
+                </Button>
+                <Button type="button" onClick={handleReceive} disabled={receiving}>
+                  {receiving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Receber
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>

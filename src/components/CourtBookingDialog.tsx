@@ -281,11 +281,15 @@ export function CourtBookingDialog({
   // Forma de pagamento / conta corrente / recebido POR JOGADOR quando o valor
   // é lançado para vários clientes. Sem ajuste, vale o padrão (campos gerais).
   const [playerPay, setPlayerPay] = useState<Record<string, Partial<PlayerPay>>>({});
-  const payFor = (id: string): PlayerPay => ({
-    method: playerPay[id]?.method ?? payMethod,
-    direction: playerPay[id]?.direction ?? payDirection,
-    received: playerPay[id]?.received ?? payReceived,
-  });
+  const payFor = (id: string): PlayerPay => {
+    const direction = playerPay[id]?.direction ?? payDirection;
+    return {
+      method: playerPay[id]?.method ?? payMethod,
+      direction,
+      // Débito na conta não é dinheiro recebido.
+      received: direction === "debito" ? false : (playerPay[id]?.received ?? payReceived),
+    };
+  };
   // Na quadra dividida, só vira lançamento quem tem algo marcado: forma de
   // pagamento, débito na conta ou recebido. Sem nada, não entra no caixa
   // (nada de "Pendente" pra quem não foi cobrado aqui).
@@ -1180,7 +1184,12 @@ export function CourtBookingDialog({
           start_time: startTime,
           end_time: endTime,
           court,
-          received: splitTargets.length > 1 ? payFor(cid).received : payReceived,
+          received:
+            splitTargets.length > 1
+              ? payFor(cid).received
+              : payDirection === "debito"
+                ? false
+                : payReceived,
           to_account: (splitTargets.length > 1 ? payFor(cid).direction : payDirection) !== "",
           account_direction: (splitTargets.length > 1 ? payFor(cid).direction : payDirection) || null,
           notes:
@@ -1261,7 +1270,7 @@ export function CourtBookingDialog({
         start_time: startTime,
         end_time: endTime,
         court,
-        received: payReceived2,
+        received: payDirection2 === "debito" ? false : payReceived2,
         to_account: payDirection2 !== "",
         account_direction: payDirection2 || null,
         notes: `Auto (mapa) · ${courtShort(court)} · ${startTime.slice(0, 5)}–${endTime.slice(0, 5)} · 2º jogador`,
@@ -2083,7 +2092,7 @@ export function CourtBookingDialog({
         start_time: startTime,
         end_time: endTime,
         court: editCourt,
-        received: payReceived,
+        received: payDirection === "debito" ? false : payReceived,
         to_account: payDirection !== "",
         account_direction: payDirection || null,
         notes: `Auto (mapa) · ${courtShort(editCourt)} · ${startTime.slice(0, 5)}–${endTime.slice(0, 5)}`,
@@ -2372,7 +2381,7 @@ export function CourtBookingDialog({
       start_time: existing.start_time,
       end_time: existing.end_time,
       court: existing.court,
-      received: payReceived,
+      received: payDirection === "debito" ? false : payReceived,
       to_account: payDirection !== "",
       account_direction: payDirection || null,
       notes: `Auto (mapa) · ${courtShort(existing.court)} · ${existing.start_time.slice(0, 5)}–${existing.end_time.slice(0, 5)}`,
@@ -3578,7 +3587,10 @@ export function CourtBookingDialog({
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox
                           checked={payDirection === "debito"}
-                          onCheckedChange={(v) => setPayDirection(v === true ? "debito" : "")}
+                          onCheckedChange={(v) => {
+                            setPayDirection(v === true ? "debito" : "");
+                            if (v === true) setPayReceived(false);
+                          }}
                         />
                         Debitar da conta corrente
                       </label>
@@ -3591,7 +3603,8 @@ export function CourtBookingDialog({
                       </label>
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox
-                          checked={payReceived}
+                          disabled={payDirection === "debito"}
+                          checked={payDirection !== "debito" && payReceived}
                           onCheckedChange={(v) => setPayReceived(v === true)}
                         />
                         Pagamento recebido
@@ -4296,7 +4309,10 @@ export function CourtBookingDialog({
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox
                           checked={payDirection === "debito"}
-                          onCheckedChange={(v) => setPayDirection(v === true ? "debito" : "")}
+                          onCheckedChange={(v) => {
+                            setPayDirection(v === true ? "debito" : "");
+                            if (v === true) setPayReceived(false);
+                          }}
                         />
                         Debitar da conta corrente
                       </label>
@@ -4309,7 +4325,8 @@ export function CourtBookingDialog({
                       </label>
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox
-                          checked={payReceived}
+                          disabled={payDirection === "debito"}
+                          checked={payDirection !== "debito" && payReceived}
                           onCheckedChange={(v) => setPayReceived(v === true)}
                         />
                         Pagamento recebido
@@ -4422,7 +4439,10 @@ export function CourtBookingDialog({
                           <label className="flex items-center gap-2 text-sm">
                             <Checkbox
                               checked={payDirection2 === "debito"}
-                              onCheckedChange={(v) => setPayDirection2(v === true ? "debito" : "")}
+                              onCheckedChange={(v) => {
+                                setPayDirection2(v === true ? "debito" : "");
+                                if (v === true) setPayReceived2(false);
+                              }}
                             />
                             Debitar da conta corrente
                           </label>
@@ -4435,7 +4455,8 @@ export function CourtBookingDialog({
                           </label>
                           <label className="flex items-center gap-2 text-sm">
                             <Checkbox
-                              checked={payReceived2}
+                              disabled={payDirection2 === "debito"}
+                              checked={payDirection2 !== "debito" && payReceived2}
                               onCheckedChange={(v) => setPayReceived2(v === true)}
                             />
                             Pagamento recebido
@@ -4542,13 +4563,16 @@ function PlayerPaymentRows({
               <label className="flex items-center gap-1.5 text-xs">
                 <Checkbox
                   checked={v.direction === "debito"}
-                  onCheckedChange={(c) => onChange(r.id, { direction: c === true ? "debito" : "" })}
+                  onCheckedChange={(c) =>
+                    onChange(r.id, c === true ? { direction: "debito", received: false } : { direction: "" })
+                  }
                 />
                 Débito na conta
               </label>
               <label className="flex items-center gap-1.5 text-xs">
                 <Checkbox
-                  checked={v.received}
+                  disabled={v.direction === "debito"}
+                  checked={v.direction !== "debito" && v.received}
                   onCheckedChange={(c) => onChange(r.id, { received: c === true })}
                 />
                 Recebido
@@ -4805,7 +4829,10 @@ function EditBookingForm(props: {
           <label className="flex items-center gap-2 text-sm">
             <Checkbox
               checked={props.payDirection === "debito"}
-              onCheckedChange={(v) => props.setPayDirection(v === true ? "debito" : "")}
+              onCheckedChange={(v) => {
+                props.setPayDirection(v === true ? "debito" : "");
+                if (v === true) props.setPayReceived(false);
+              }}
             />
             Debitar da conta corrente
           </label>
@@ -4818,7 +4845,8 @@ function EditBookingForm(props: {
           </label>
           <label className="flex items-center gap-2 text-sm">
             <Checkbox
-              checked={props.payReceived}
+              disabled={props.payDirection === "debito"}
+              checked={props.payDirection !== "debito" && props.payReceived}
               onCheckedChange={(v) => props.setPayReceived(v === true)}
             />
             Pagamento recebido
