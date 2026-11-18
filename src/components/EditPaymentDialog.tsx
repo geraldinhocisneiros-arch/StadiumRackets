@@ -275,8 +275,12 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
       start_time: form.startTime || null,
       end_time: form.endTime || null,
       court: form.court ? Number(form.court) : null,
+      // Débito na conta não é dinheiro recebido (o pagamento entra depois
+      // como crédito, pelo botão "Receber" no Caixa).
       received:
-        isRankingCategoryName(catSelNorm)
+        form.accountDirection === "debito"
+          ? false
+          : isRankingCategoryName(catSelNorm)
           ? form.received
           : (Number(form.amount) || 0) === 0
             ? true
@@ -743,8 +747,8 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className={`flex items-center gap-2 rounded-md border p-3 ${isEstorno || isAutoCC ? "opacity-50" : ""}`}>
                     <Checkbox
-                      disabled={isEstorno || isAutoCC}
-                      checked={form.received}
+                      disabled={isEstorno || isAutoCC || form.accountDirection === "debito"}
+                      checked={form.accountDirection !== "debito" && form.received}
                       onCheckedChange={(v) => update({ received: v === true })}
                     />
                     <Label className="cursor-pointer font-normal">Pagamento recebido</Label>
@@ -773,7 +777,9 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
                     <Checkbox
                       disabled={!eligible || isAutoCC || isEstorno}
                       checked={form.accountDirection === "debito"}
-                      onCheckedChange={(v) => update({ accountDirection: v === true ? "debito" : "" })}
+                      onCheckedChange={(v) =>
+                        update(v === true ? { accountDirection: "debito", received: false } : { accountDirection: "" })
+                      }
                     />
                     <Label className="cursor-pointer font-normal text-center leading-tight">Debitar da<br />C/C</Label>
                   </div>
