@@ -57,6 +57,7 @@ import {
   type FixedException,
   isRankingCategoryName,
   isRankingDuplaName,
+  isPickleballCourt,
   findFixedExceptionForHour,
   isManutencaoName,
   isManutencaoClientName,
@@ -67,6 +68,7 @@ import {
 import { fetchUnmovedFixedGroup, moveBookingOntoFixed, moveFixedToday } from "@/lib/fixed-swap";
 import { ClientCombobox, type ClientOption } from "@/components/ClientCombobox";
 import { calcPrice, type PriceBand } from "@/lib/pricing";
+import { PlayPickleballPanel } from "@/components/PlayPickleballPanel";
 import { effectiveClientDiscount, normalizeCategoryName, isAvulsoCategoryName } from "@/lib/category";
 import {
   COURT_MAP_BOOKING_SELECT,
@@ -302,6 +304,8 @@ export function CourtBookingDialog({
   const [receiveDebt, setReceiveDebt] = useState<ReceiveOpenDebtValue>(EMPTY_RECEIVE_OPEN_DEBT);
   // Painel "Jogadores (dividir quadra)" na tela de detalhes.
   const [viewShowPlayers, setViewShowPlayers] = useState<boolean>(false);
+  // Painel "Play pickleball" na tela de detalhes.
+  const [viewShowPlay, setViewShowPlay] = useState<boolean>(false);
   // Jogo de ranking: lançamento pendente (valor zerado) criado automaticamente
   // ao marcar o jogo no mapa — finalizar aqui atualiza esse registro em vez
   // de criar um novo. payTargetClientId permite escolher quem paga (cliente
@@ -3309,8 +3313,47 @@ export function CourtBookingDialog({
                 >
                   Jogadores (dividir quadra)
                 </Button>
+                {isPickleballCourt(existing.court) && (
+                  <Button type="button" variant="outline" onClick={() => setViewShowPlay((v) => !v)}>
+                    Play pickleball
+                  </Button>
+                )}
               </div>
             )}
+
+            {!isManutencao &&
+              canCancel &&
+              !existing.cancelled_at &&
+              viewShowPlay &&
+              isPickleballCourt(existing.court) && (
+                <PlayPickleballPanel
+                  bookingId={existing.id}
+                  bookingDate={bookingDate}
+                  court={existing.court}
+                  startTime={existing.start_time}
+                  endTime={existing.end_time}
+                  players={viewPlayers}
+                  courtPrice={(() => {
+                    const avulsoCat = categories.find((c) => isAvulsoCategoryName(c.name));
+                    const calc = calcPrice({
+                      bands: priceBands,
+                      weekday: weekdayOfISO(bookingDate),
+                      startTime: existing.start_time,
+                      endTime: existing.end_time,
+                      categoryId: avulsoCat?.id ?? null,
+                      court: existing.court,
+                      date: bookingDate,
+                    });
+                    return calc && calc.matched ? calc.total : 0;
+                  })()}
+                  payCategoryId={categories.find((c) => isAvulsoCategoryName(c.name))?.id ?? null}
+                  onDone={() => {
+                    setViewShowPlay(false);
+                    onSaved();
+                    onOpenChange(false);
+                  }}
+                />
+              )}
 
             {!isManutencao && canCancel && !existing.cancelled_at && viewShowPlayers && (
               <BookingParticipantsPanel

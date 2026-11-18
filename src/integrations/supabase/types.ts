@@ -2247,6 +2247,33 @@ export type Database = {
         }
         Relationships: []
       }
+      pickleball_play_usage: {
+        Row: {
+          booking_id: string
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          reference_month: string
+        }
+        Insert: {
+          booking_id: string
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          reference_month: string
+        }
+        Update: {
+          booking_id?: string
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          reference_month?: string
+        }
+        Relationships: []
+      }
       pickleball_class_billing: {
         Row: {
           account_entry_id: string | null
@@ -3600,6 +3627,14 @@ export type Database = {
           _start?: string
         }
         Returns: string
+      }
+      pickleball_play_balance: {
+        Args: { _client_ids: string[]; _month: string }
+        Returns: {
+          client_id: string
+          plays_total: number
+          plays_used: number
+        }[]
       }
       pickleball_class_fee_preview: {
         Args: { _month: string }
