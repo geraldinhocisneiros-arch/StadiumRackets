@@ -8,17 +8,18 @@ export const PAYMENT_METHOD_OPTIONS: Array<[string, string]> = [
   ["pix", "Pix"],
   ["debito", "Débito"],
   ["credito", "Crédito"],
-  ["letzplay_pix", "Letzplay Pix"],
-  ["letzplay_cartao", "Letzplay Cartão"],
-  ["rede_itau", "Rede Itaú"],
-  ["mercadopago", "Mercado Pago"],
-  ["outro", "Outro"],
 ];
 
 // Rótulos pra exibir lançamentos — inclui formas que não se escolhem à mão
-// (conta corrente, pagamentos online do Mercado Pago, legado).
+// (conta corrente, pagamentos online do Mercado Pago) e formas antigas que
+// saíram da lista mas ainda existem em lançamentos históricos.
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   ...Object.fromEntries(PAYMENT_METHOD_OPTIONS),
+  letzplay_pix: "Letzplay Pix",
+  letzplay_cartao: "Letzplay Cartão",
+  rede_itau: "Rede Itaú",
+  mercadopago: "Mercado Pago",
+  outro: "Outro",
   transferencia: "Transferência",
   conta_corrente: "Conta corrente",
   mercadopago_pix: "Mercado Pago Pix (online)",
