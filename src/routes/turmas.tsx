@@ -688,7 +688,27 @@ const FEE_STATUS: Record<FeeRow["status"], { label: string; cls: string }> = {
   },
 };
 
+const FEE_KINDS = {
+  pickleball: {
+    label: "Pickleball",
+    preview: "pickleball_class_fee_preview",
+    generate: "pickleball_class_generate_fees",
+    desc: "Mensalidade pickleball",
+    empty: "Nenhum aluno em turma nem na categoria Escolinha Pickleball nesse mês.",
+  },
+  tenis: {
+    label: "Tênis",
+    preview: "tennis_school_fee_preview",
+    generate: "tennis_school_generate_fees",
+    desc: "Mensalidade tênis",
+    empty: "Nenhum cliente ativo na categoria Escolinha Tenis.",
+  },
+} as const;
+type FeeKind = keyof typeof FEE_KINDS;
+
 function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const [kind, setKind] = useState<FeeKind>("pickleball");
+  const K = FEE_KINDS[kind];
   const months = useMemo(() => {
     const t = todayISO();
     const y = Number(t.slice(0, 4));
@@ -709,7 +729,7 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
     setLoading(true);
     setRows(null);
     setEdits({});
-    const { data, error } = await supabase.rpc("pickleball_class_fee_preview", { _month: m });
+    const { data, error } = await supabase.rpc(FEE_KINDS[kind].preview, { _month: m });
     setLoading(false);
     if (error) return toast.error(error.message);
     setRows((data ?? []) as FeeRow[]);
@@ -717,7 +737,8 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
 
   useEffect(() => {
     if (open) loadPreview(month);
-  }, [open, month]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, month, kind]);
 
   const editable = (r: FeeRow) => r.from_category && (r.status === "gerar" || r.status === "sem_valor");
   const effectiveAmount = (r: FeeRow) =>
@@ -754,7 +775,7 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
         return toast.error(`Não consegui salvar o valor de ${r.full_name}: ${upErr.message}`);
       }
     }
-    const { data, error } = await supabase.rpc("pickleball_class_generate_fees", { _month: month });
+    const { data, error } = await supabase.rpc(K.generate, { _month: month });
     setGenerating(false);
     if (error) return toast.error(error.message);
     const r = (data as Array<{ generated: number; total: number }> | null)?.[0];
@@ -766,16 +787,30 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Gerar mensalidades do pickleball</DialogTitle>
+          <DialogTitle>Gerar mensalidades da escolinha</DialogTitle>
           <DialogDescription>
-            Lança um débito por aluno (“Mensalidade pickleball — mês/ano”): quem está em turma, com a
-            soma das matrículas, e quem é da categoria Escolinha Pickleball sem turma, com o valor do
-            cadastro. Nunca lança duas vezes no mesmo mês. Quando o aluno paga no Caixa, o crédito
-            abate o débito — saldo zerado é mês quitado.
+            Lança um débito por aluno (“{K.desc} — mês/ano”) com o valor do cadastro do cliente.
+            {kind === "pickleball" &&
+              " No pickleball, quem está em turma entra com a soma das matrículas."}{" "}
+            Nunca lança duas vezes no mesmo mês. Quando o aluno paga no Caixa, o crédito abate o
+            débito — saldo zerado é mês quitado.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex items-center gap-2">
-          <Label>Mês</Label>
+        <div className="flex flex-wrap items-center gap-2">
+          <Label>Escolinha</Label>
+          <Select value={kind} onValueChange={(v) => setKind(v as FeeKind)}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(FEE_KINDS) as FeeKind[]).map((k) => (
+                <SelectItem key={k} value={k}>
+                  {FEE_KINDS[k].label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Label className="ml-2">Mês</Label>
           <Select value={month} onValueChange={setMonth}>
             <SelectTrigger className="w-48">
               <SelectValue />
@@ -794,7 +829,7 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
             <div className="py-6 text-center text-muted-foreground">Carregando prévia...</div>
           ) : rows.length === 0 ? (
             <div className="py-6 text-center text-muted-foreground">
-              Nenhum aluno em turma nem na categoria Escolinha Pickleball nesse mês.
+              {K.empty}
             </div>
           ) : (
             <Table>
