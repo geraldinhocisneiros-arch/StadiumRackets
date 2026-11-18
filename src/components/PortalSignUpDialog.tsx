@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -45,6 +45,16 @@ export function PortalSignUpDialog({
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Sempre abre em branco, mesmo depois de fechar sem concluir.
+  useEffect(() => {
+    if (!open) return;
+    setFullName("");
+    setPhone("");
+    setEmail("");
+    setPassword("");
+    setConfirm("");
+  }, [open]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();

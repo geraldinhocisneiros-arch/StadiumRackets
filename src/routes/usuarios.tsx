@@ -262,7 +262,7 @@ function UsuariosPage() {
                 <Plus className="h-4 w-4 mr-2" /> Novo usuário
               </Button>
             </DialogTrigger>
-            <CreateUserDialog onClose={() => setOpen(false)} onCreated={load} />
+            <CreateUserDialog open={open} onClose={() => setOpen(false)} onCreated={load} />
           </Dialog>
         </div>
       </div>
@@ -559,7 +559,15 @@ function SignupBlockersSweepButton() {
   );
 }
 
-function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function CreateUserDialog({
+  open,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -567,6 +575,15 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
     "admin" | "recepcionista" | "diretoria" | "limpeza" | "visualizador"
   >("recepcionista");
   const [submitting, setSubmitting] = useState(false);
+
+  // Sempre abre em branco, mesmo depois de fechar sem salvar.
+  useEffect(() => {
+    if (!open) return;
+    setName("");
+    setEmail("");
+    setPassword("");
+    setRole("recepcionista");
+  }, [open]);
 
   const createStaffUserFn = useServerFn(createStaffUser);
 
@@ -883,6 +900,7 @@ function LinkAccountControl({ user, onChanged }: { user: UserRow; onChanged: () 
 
   useEffect(() => {
     if (!open) return;
+    setClientId("");
     setLoadingClients(true);
     // Sem filtro de "active": o cadastro certo do cliente costuma estar
     // justamente inativo (foi o motivo do autocadastro não achar o vínculo

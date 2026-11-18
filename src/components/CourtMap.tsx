@@ -24,6 +24,7 @@ import {
   hoursToLabel,
   SOURCE_COLOR,
   FIXED_COLOR,
+  CLASS_COLOR,
   bookingCellColorClass,
   findFixedExceptionForHour,
   isMovedFromFixedBooking,
@@ -582,6 +583,7 @@ export function CourtMap({
               if (hideOccupantDetails && !isOwn) {
                 return "bg-muted border border-border/60 text-muted-foreground";
               }
+              if (f.class_id) return `${CLASS_COLOR} border`;
               return `${FIXED_COLOR} border`;
             })(),
         )}
@@ -1337,6 +1339,28 @@ function FixedLabel({
   siblings?: FixedSchedule[];
 }) {
   const rangeLabel = `${hoursToLabel(timeToHours(fixed.start_time))}–${hoursToLabel(timeToHours(fixed.end_time))}`;
+  if (fixed.class_id) {
+    // Turma de pickleball: um bloco só com o nome da turma e quantos alunos.
+    const count = siblings.length + 1;
+    return (
+      <div className="leading-tight">
+        <div
+          className={cn("font-medium whitespace-normal break-words", cancelled && "line-through opacity-70")}
+          title={[fixed, ...siblings].map((s) => s.clients?.full_name ?? "").join(", ")}
+        >
+          Turma {fixed.pickleball_classes?.name ?? ""}
+        </div>
+        {cancelled && (
+          <div className="text-[10px] font-semibold uppercase tracking-normal text-destructive">Cancelado</div>
+        )}
+        <div className="text-[10px] opacity-70 whitespace-normal break-words">
+          {span > 1 ? `${rangeLabel} • ` : ""}
+          {count} aluno{count > 1 ? "s" : ""}
+          {fixed.teachers?.name ? ` • ${fixed.teachers.name}` : ""}
+        </div>
+      </div>
+    );
+  }
   const firstName = (s?: FixedSchedule) =>
     s?.clients?.full_name?.split(" ")[0] ?? "Cliente";
   const primaryName = fixed.clients?.full_name ?? "Fixo";

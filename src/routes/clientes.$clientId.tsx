@@ -921,6 +921,7 @@ function ClientDetailPage() {
                 </Button>
               </DialogTrigger>
               <NewEntryDialog
+                open={open}
                 clientId={client.id}
                 userId={user?.id ?? null}
                 onClose={() => setOpen(false)}
@@ -1319,11 +1320,13 @@ function ClientDetailPage() {
 }
 
 function NewEntryDialog({
+  open,
   clientId,
   userId,
   onClose,
   onSaved,
 }: {
+  open: boolean;
   clientId: string;
   userId: string | null;
   onClose: () => void;
@@ -1334,6 +1337,15 @@ function NewEntryDialog({
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(todayISO());
   const [submitting, setSubmitting] = useState(false);
+
+  // Sempre abre em branco, mesmo depois de fechar sem salvar.
+  useEffect(() => {
+    if (!open) return;
+    setType("debito");
+    setAmount("");
+    setDescription("");
+    setDate(todayISO());
+  }, [open]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1891,6 +1903,11 @@ function TransferEntryDialog({
   // recarregar a página.
   useEffect(() => {
     if (!open) return;
+    setDestId("");
+    setKind("credito");
+    setAmount("");
+    setDescription("");
+    setDate(todayISO());
     void fetchAll<ClientOption & { active: boolean }>("clients", "id, full_name, active").then(
       (data) =>
         setClients(

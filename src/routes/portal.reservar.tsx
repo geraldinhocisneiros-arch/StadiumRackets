@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { normalizeCategoryName } from "@/lib/category";
+import { normalizeCategoryName, isAvulsoCategoryName } from "@/lib/category";
 import { usePortalAccounts } from "@/hooks/usePortalClientId";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -159,7 +159,7 @@ function PortalReservar() {
         return;
       }
       const rows = (data ?? []) as Array<{ id: string; name: string }>;
-      const avulso = rows.find((c) => normalizeCategoryName(c.name) === "avulso");
+      const avulso = rows.find((c) => isAvulsoCategoryName(c.name));
       setAvulsoCategoryId(avulso?.id ?? null);
       setIsAvulso(!!categoryId && avulso?.id === categoryId);
     })();

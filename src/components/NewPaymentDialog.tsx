@@ -30,6 +30,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { toast } from "sonner";
+import { isStockCategory, isAvulsoCategoryName } from "@/lib/category";
 import { Loader2, Check, ChevronsUpDown, X, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logAction } from "@/lib/audit";
@@ -53,6 +54,7 @@ interface CategoryRow {
   id: string;
   name: string;
   default_amount: number;
+  stock_item_id?: string | null;
 }
 
 interface FormState {
@@ -102,7 +104,7 @@ const computeFinalAmount = (amount: string, discountPercent: string) => {
 };
 
 
-import { COURTS, courtLabel } from "@/lib/court-map";
+import { COURTS, courtLabel, isRankingCategoryName } from "@/lib/court-map";
 const NONE_VALUE = "__none__";
 
 export interface NewPaymentDialogProps {
@@ -133,7 +135,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
           "clients",
           "id, full_name, custom_amount, category_id, default_discount_percent, active, client_categories(name, default_amount)",
         ),
-        supabase.from("client_categories").select("id, name, default_amount").eq("active", true).order("name"),
+        supabase.from("client_categories").select("id, name, default_amount, stock_item_id").eq("active", true).order("name"),
         supabase.from("price_table").select("id, categories, weekday, start_time, end_time, price_per_hour, courts, starts_on, ends_on"),
       ]);
       setClients(
@@ -206,14 +208,10 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
     }
 
     const c = clients.find((cl) => cl.id === form.clientId);
-    let discountToApply: number | null = null;
-    if (c?.default_discount_percent != null) {
-      discountToApply = c.default_discount_percent;
-    } else {
-      discountToApply = 10;
-    }
+    // Stadium: sem desconto padrão de mensalista — só o do cadastro do cliente.
+    const discountToApply = Number(c?.default_discount_percent) || 0;
 
-    if (discountToApply != null) {
+    if (discountToApply > 0) {
       setForm((f) => (f.discountPercent ? f : { ...f, discountPercent: String(discountToApply) }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -250,7 +248,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
       toast.error("Mensalista com Crédito exige uma forma de pagamento.");
       return;
     }
-    if ((catSelNorm === "ranking masculino" || catSelNorm === "ranking feminino") && (!form.court || !form.startTime)) {
+    if ((isRankingCategoryName(catSelNorm)) && (!form.court || !form.startTime)) {
       toast.error("Para Ranking, informe a quadra e o horário de início.");
       return;
     }
@@ -282,7 +280,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
     const discountPct = Math.min(Math.max(Number(form.discountPercent) || 0, 0), 100);
     const baseAmount = Number(form.amount) || 0;
     const mergedNotes = form.notes?.trim() || null;
-    const isStockCat = catSelNorm === "grip" || catSelNorm === "terno de bola";
+    const isStockCat = isStockCategory(categories.find((c) => c.id === form.categoryId));
     const qtyNum = isStockCat ? Math.max(1, parseInt(form.quantity, 10) || 1) : 1;
     // Busca o usuário logado agora (não o do contexto, que pode estar
     // desatualizado num computador compartilhado onde outro recepcionista
@@ -300,7 +298,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
       end_time: form.endTime || null,
       court: form.court ? Number(form.court) : null,
       received:
-        catSelNorm === "ranking masculino" || catSelNorm === "ranking feminino"
+        isRankingCategoryName(catSelNorm)
           ? form.received
           : finalAmount === 0
             ? true
@@ -345,7 +343,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
     .toLowerCase()
     .trim();
   const isEstorno = catNorm === "estorno";
-  const isStockCat = catNorm === "grip" || catNorm === "terno de bola";
+  const isStockCat = isStockCategory(cat);
   const isAutoCC = catNorm === "credito gympass";
   const autoCCDirection: "credito" | "debito" = "credito";
   const eligible =
@@ -357,6 +355,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
       catNorm === "pendencia avulsa" ||
       catNorm === "ranking masculino" ||
       catNorm === "ranking feminino" ||
+      catNorm === "ranking dupla" ||
       isEstorno);
   const isCommissionable = catNorm === "mensalista";
   const isMensalistaDebito = catNorm === "mensalista" && form.accountDirection === "debito";
@@ -369,7 +368,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
     "tenis de mesa (mensalista)",
     "terno de bola",
     "credito gympass",
-  ].includes(catNorm) || isMensalistaCredito || isEstorno;
+  ].includes(catNorm) || isStockCat || isMensalistaCredito || isEstorno;
   useEffect(() => {
     if (noTimeCourt && (form.court || form.startTime || form.endTime)) {
       setForm((f) => ({ ...f, court: "", startTime: "", endTime: "" }));
@@ -729,7 +728,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
             )}
 
             <div className={`space-y-2 ${noTimeCourt ? "opacity-50" : ""}`}>
-              <Label>Quadra {(catNorm === "ranking masculino" || catNorm === "ranking feminino" || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
+              <Label>Quadra {(isRankingCategoryName(catNorm) || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
               <div className="flex gap-2">
                 <Select
                   key={form.court === "" ? "empty" : "set"}
@@ -764,7 +763,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
 
             <div className="grid grid-cols-2 gap-4">
               <div className={`space-y-2 ${noTimeCourt ? "opacity-50" : ""}`}>
-                <Label>Horário de início {(catNorm === "ranking masculino" || catNorm === "ranking feminino" || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
+                <Label>Horário de início {(isRankingCategoryName(catNorm) || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
                 <Input
                   type="time"
                   value={form.startTime}
@@ -873,7 +872,7 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
                   <strong>Saldo anterior</strong> ou <strong>crédito GYMPASS</strong>.
                 </p>
               )}
-              {catNorm === "avulso" && form.clientId && !form.received && (
+              {isAvulsoCategoryName(catNorm) && form.clientId && !form.received && (
                 <p className="text-xs text-amber-600 dark:text-amber-400">
                   Será lançado como débito na conta corrente do cliente até a quitação.
                 </p>
