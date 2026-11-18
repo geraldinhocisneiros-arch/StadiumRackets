@@ -281,6 +281,10 @@ export function CourtBookingDialog({
     direction: playerPay[id]?.direction ?? payDirection,
     received: playerPay[id]?.received ?? payReceived,
   });
+  // Na quadra dividida, só vira lançamento quem tem algo marcado: forma de
+  // pagamento, débito na conta ou recebido. Sem nada, não entra no caixa
+  // (nada de "Pendente" pra quem não foi cobrado aqui).
+  const hasPaySetting = (p: PlayerPay) => p.direction !== "" || p.received || !!p.method;
   const patchPlayerPay = (id: string, patch: Partial<PlayerPay>) =>
     setPlayerPay((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
   useEffect(() => {
@@ -1097,6 +1101,9 @@ export function CourtBookingDialog({
     }
     const shouldCreatePayment =
       wantsPayment && !!clientId && (amountNum > 0 || payReceived || payDirection !== "");
+    // Quem já recebe a mensagem do lançamento (que confirma a reserva junto)
+    // não recebe a de "reserva criada" — uma mensagem por cliente.
+    const notifiedWithPayment = new Set<string>();
     if (shouldCreatePayment) {
       if (amountNum < 0) {
         setSubmitting(false);
@@ -1121,11 +1128,14 @@ export function CourtBookingDialog({
           : [clientId];
       const splitAmounts = splitEvenly(amountNum, splitTargets.length);
       const baseNotes = `Auto (mapa) · ${courtShort(court)} · ${startTime.slice(0, 5)}–${endTime.slice(0, 5)}`;
-      const { error: payErr } = await supabase.from("payments").insert(
-        splitTargets.map((cid, i) => ({
+      const charged = splitTargets
+        .map((cid, i) => ({ cid, amount: splitAmounts[i]!, i }))
+        .filter((t) => splitTargets.length === 1 || hasPaySetting(payFor(t.cid)));
+      const { error: payErr } = charged.length === 0 ? { error: null } : await supabase.from("payments").insert(
+        charged.map(({ cid, amount }) => ({
           client_id: cid,
           category_id: categoryId,
-          amount: splitAmounts[i]!,
+          amount,
           method: ((splitTargets.length > 1 ? payFor(cid).method : payMethod) || "outro") as never,
           paid_at: paidAtIso,
           start_time: startTime,
@@ -1158,14 +1168,16 @@ export function CourtBookingDialog({
         if (debtErr) toast.error(`Quadra lançada, mas falhou o recebimento do débito: ${debtErr}`);
         else toast.success(`Débito em aberto recebido: ${fmtBRL(debtToReceive)}`);
       }
-      splitTargets.forEach((cid, i) => {
+      charged.forEach(({ cid, amount }) => {
+        notifiedWithPayment.add(cid);
         void offerWhatsAppPaymentNotification({
           clientId: cid,
-          amount: splitAmounts[i]!,
+          amount,
           accountDirection:
             (splitTargets.length > 1 ? payFor(cid).direction : payDirection) || null,
           paidAt: paidAtIso,
           startTime,
+          booking: { court, bookingDate, startTime, endTime },
         });
       });
     }
@@ -1220,12 +1232,14 @@ export function CourtBookingDialog({
       if (payErr2) {
         toast.error(`Locação criada, mas falhou o lançamento do 2º jogador: ${payErr2.message}`);
       } else {
+        notifiedWithPayment.add(secondClientId);
         void offerWhatsAppPaymentNotification({
           clientId: secondClientId,
           amount: amountNum2,
           accountDirection: payDirection2 || null,
           paidAt: paidAtIso2,
           startTime,
+          booking: { court, bookingDate, startTime, endTime },
         });
       }
     }
@@ -1245,7 +1259,7 @@ export function CourtBookingDialog({
     onSaved();
     onOpenChange(false);
 
-    if (clientId) {
+    if (clientId && !notifiedWithPayment.has(clientId)) {
       void offerBookingReservedNotification({
         clientId,
         court,
@@ -1255,6 +1269,7 @@ export function CourtBookingDialog({
       });
     }
     for (const cid of uniqueParticipants) {
+      if (notifiedWithPayment.has(cid)) continue;
       void offerBookingReservedNotification({
         clientId: cid,
         court,
@@ -2323,10 +2338,18 @@ export function CourtBookingDialog({
           )
         : [targetClientId];
     const viewSplitAmounts = splitEvenly(amountNum, viewSplitTargets.length);
+    const viewCharged = viewSplitTargets
+      .map((cid, i) => ({ cid, i }))
+      .filter((t) => viewSplitTargets.length === 1 || hasPaySetting(payFor(t.cid)));
+    if (!viewPendingPaymentId && viewCharged.length === 0) {
+      setSubmitting(false);
+      toast.error("Nenhum jogador com forma de pagamento, débito na conta ou recebido marcado.");
+      return;
+    }
     const { error } = viewPendingPaymentId
       ? await supabase.from("payments").update(payload).eq("id", viewPendingPaymentId)
       : await supabase.from("payments").insert(
-          viewSplitTargets.map((cid, i) => ({
+          viewCharged.map(({ cid, i }) => ({
             ...payload,
             ...(viewSplitTargets.length > 1
               ? {
@@ -2362,7 +2385,7 @@ export function CourtBookingDialog({
     }
     setSubmitting(false);
     setReceiveDebt(EMPTY_RECEIVE_OPEN_DEBT);
-    viewSplitTargets.forEach((cid, i) => {
+    viewCharged.forEach(({ cid, i }) => {
       void offerWhatsAppPaymentNotification({
         clientId: cid,
         amount: viewSplitAmounts[i]!,
@@ -4414,7 +4437,8 @@ function PlayerPaymentRows({
     <div className="space-y-2 rounded-md border bg-background p-2">
       <div className="text-xs font-medium">Por jogador</div>
       <p className="text-[11px] text-muted-foreground">
-        Os campos acima são o padrão. Ajuste aqui quem paga de outro jeito.
+        Os campos acima são o padrão. Ajuste aqui quem paga de outro jeito. Quem ficar sem forma,
+        sem débito na conta e sem recebido não é lançado no caixa.
       </p>
       {rows.map((r) => {
         const v = resolve(r.id);
