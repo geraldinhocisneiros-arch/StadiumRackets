@@ -875,7 +875,7 @@ function CaixaPage() {
     const { data: inserted, error } = await supabase
       .from("payments")
       .insert(rows.map((r) => ({ ...r, recorded_by: recorderId })))
-      .select("id, amount, client_id");
+      .select("id, amount, client_id, received");
     setSubmitting(false);
     if (error) {
       toast.error(error.message);
@@ -958,9 +958,11 @@ function CaixaPage() {
         // Agrupa por client_id para somar quando o mesmo cliente recebeu múltiplas
         // entradas no mesmo lançamento (improvável, mas seguro).
         const byClient = new Map<string, number>();
+        const receivedByClient = new Map<string, boolean>();
         for (const p of inserted) {
           if (!p.client_id) continue;
           byClient.set(p.client_id, (byClient.get(p.client_id) ?? 0) + (Number(p.amount) || 0));
+          receivedByClient.set(p.client_id, (receivedByClient.get(p.client_id) ?? true) && !!p.received);
         }
         // A quitação do débito não entra no valor "do lançamento" da
         // mensagem — o saldo atualizado já aparece nela.
@@ -980,6 +982,7 @@ function CaixaPage() {
               paidAt: paidAtIso,
               startTime: form.startTime || null,
               categoryName: catName,
+              received: receivedByClient.get(clientId) ?? null,
             },
             (cid) => markClientNotified(cid),
           );
