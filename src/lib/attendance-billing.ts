@@ -36,6 +36,11 @@ interface BillArgs {
   startTime: string;
   endTime: string;
   court: number;
+  // Categoria usada para escolher a faixa na tabela de preços. Faixas
+  // cadastradas com categoria só valem para quem passa essa categoria —
+  // sem isso, uma tabela toda categorizada (ex.: "Mensalista") nunca casa
+  // e a presença sai R$ 0,00.
+  categoryId?: string | null;
   discountPercent: number; // 0..100
   // Status dos DEMAIS fixos cobráveis (não excluídos) que compartilham o slot
   // (não inclui este cliente). null = ainda não marcado.
@@ -62,6 +67,7 @@ export function computeAttendanceAmount(args: BillArgs): BillResult {
           startTime: args.startTime,
           endTime: args.endTime,
           court: args.court,
+          categoryId: args.categoryId ?? null,
           date: args.date,
         });
   const base = calc?.total ?? 0;
