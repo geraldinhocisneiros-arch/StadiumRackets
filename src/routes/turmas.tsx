@@ -669,7 +669,11 @@ interface FeeRow {
   amount: number;
   classes: string;
   status: "gerar" | "ja_gerada" | "ja_lancada" | "sem_valor";
+  /** Aluno da categoria Escolinha Pickleball sem turma (valor vem do cadastro). */
+  from_category: boolean;
 }
+
+const parseAmount = (v: string): number => Math.round((Number(v.replace(",", ".")) || 0) * 100) / 100;
 
 const FEE_STATUS: Record<FeeRow["status"], { label: string; cls: string }> = {
   gerar: {
@@ -697,11 +701,14 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
   const [rows, setRows] = useState<FeeRow[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  // Valor digitado para aluno sem turma (vai pro cadastro do cliente).
+  const [edits, setEdits] = useState<Record<string, string>>({});
   const confirm = useConfirm();
 
   const loadPreview = async (m: string) => {
     setLoading(true);
     setRows(null);
+    setEdits({});
     const { data, error } = await supabase.rpc("pickleball_class_fee_preview", { _month: m });
     setLoading(false);
     if (error) return toast.error(error.message);
@@ -712,8 +719,16 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
     if (open) loadPreview(month);
   }, [open, month]);
 
-  const toGenerate = (rows ?? []).filter((r) => r.status === "gerar");
-  const totalToGenerate = toGenerate.reduce((s, r) => s + Number(r.amount), 0);
+  const editable = (r: FeeRow) => r.from_category && (r.status === "gerar" || r.status === "sem_valor");
+  const effectiveAmount = (r: FeeRow) =>
+    editable(r) && edits[r.client_id] !== undefined ? parseAmount(edits[r.client_id]!) : Number(r.amount);
+  const toGenerate = (rows ?? []).filter(
+    (r) => (r.status === "gerar" || r.status === "sem_valor") && effectiveAmount(r) > 0,
+  );
+  const totalToGenerate = toGenerate.reduce((s, r) => s + effectiveAmount(r), 0);
+  const stillWithoutValue = (rows ?? []).filter(
+    (r) => (r.status === "gerar" || r.status === "sem_valor") && effectiveAmount(r) <= 0,
+  ).length;
 
   const generate = async () => {
     if (toGenerate.length === 0) return;
@@ -724,6 +739,21 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
     )
       return;
     setGenerating(true);
+    // Grava no cadastro do aluno o valor digitado: o gerador lê de lá, e o
+    // Caixa já preenche esse valor quando o aluno vier pagar.
+    const changed = (rows ?? []).filter(
+      (r) => editable(r) && edits[r.client_id] !== undefined && effectiveAmount(r) !== Number(r.amount),
+    );
+    for (const r of changed) {
+      const { error: upErr } = await supabase
+        .from("clients")
+        .update({ custom_amount: effectiveAmount(r) > 0 ? effectiveAmount(r) : null })
+        .eq("id", r.client_id);
+      if (upErr) {
+        setGenerating(false);
+        return toast.error(`Não consegui salvar o valor de ${r.full_name}: ${upErr.message}`);
+      }
+    }
     const { data, error } = await supabase.rpc("pickleball_class_generate_fees", { _month: month });
     setGenerating(false);
     if (error) return toast.error(error.message);
@@ -736,11 +766,12 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Gerar mensalidades das turmas</DialogTitle>
+          <DialogTitle>Gerar mensalidades do pickleball</DialogTitle>
           <DialogDescription>
-            Lança um débito por aluno (“Mensalidade pickleball — mês/ano”) com a soma das matrículas
-            ativas no mês. Nunca lança duas vezes no mesmo mês e pula quem já teve a mensalidade
-            lançada à mão.
+            Lança um débito por aluno (“Mensalidade pickleball — mês/ano”): quem está em turma, com a
+            soma das matrículas, e quem é da categoria Escolinha Pickleball sem turma, com o valor do
+            cadastro. Nunca lança duas vezes no mesmo mês. Quando o aluno paga no Caixa, o crédito
+            abate o débito — saldo zerado é mês quitado.
           </DialogDescription>
         </DialogHeader>
         <div className="flex items-center gap-2">
@@ -763,7 +794,7 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
             <div className="py-6 text-center text-muted-foreground">Carregando prévia...</div>
           ) : rows.length === 0 ? (
             <div className="py-6 text-center text-muted-foreground">
-              Nenhum aluno matriculado em turma nesse mês.
+              Nenhum aluno em turma nem na categoria Escolinha Pickleball nesse mês.
             </div>
           ) : (
             <Table>
@@ -780,13 +811,29 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
                   <TableRow key={r.client_id}>
                     <TableCell>{r.full_name}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{r.classes}</TableCell>
-                    <TableCell className="text-right">{fmtBRL(r.amount)}</TableCell>
+                    <TableCell className="text-right">
+                      {editable(r) ? (
+                        <Input
+                          inputMode="decimal"
+                          className="ml-auto h-8 w-24 text-right"
+                          placeholder="R$"
+                          value={edits[r.client_id] ?? (Number(r.amount) > 0 ? String(r.amount) : "")}
+                          onChange={(e) => setEdits((m) => ({ ...m, [r.client_id]: e.target.value }))}
+                        />
+                      ) : (
+                        fmtBRL(r.amount)
+                      )}
+                    </TableCell>
                     <TableCell>
-                      <span
-                        className={cn("rounded px-1.5 py-0.5 text-xs", FEE_STATUS[r.status].cls)}
-                      >
-                        {FEE_STATUS[r.status].label}
-                      </span>
+                      {(() => {
+                        const st =
+                          editable(r) ? (effectiveAmount(r) > 0 ? "gerar" : "sem_valor") : r.status;
+                        return (
+                          <span className={cn("rounded px-1.5 py-0.5 text-xs", FEE_STATUS[st].cls)}>
+                            {FEE_STATUS[st].label}
+                          </span>
+                        );
+                      })()}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -798,6 +845,11 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
           <div className="text-sm">
             A gerar: <strong>{toGenerate.length}</strong> ·{" "}
             <strong>{fmtBRL(totalToGenerate)}</strong>
+            {stillWithoutValue > 0 && (
+              <span className="ml-2 text-amber-700 dark:text-amber-300">
+                · {stillWithoutValue} sem valor (não serão gerados)
+              </span>
+            )}
           </div>
           <Button onClick={generate} disabled={generating || toGenerate.length === 0}>
             {generating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
