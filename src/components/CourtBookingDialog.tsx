@@ -68,7 +68,12 @@ import {
 import { fetchUnmovedFixedGroup, moveBookingOntoFixed, moveFixedToday } from "@/lib/fixed-swap";
 import { ClientCombobox, type ClientOption } from "@/components/ClientCombobox";
 import { calcPrice, type PriceBand } from "@/lib/pricing";
-import { PlayPickleballPanel } from "@/components/PlayPickleballPanel";
+import {
+  PlayPickleballPanel,
+  commitPlay,
+  validatePlayDraft,
+  type PlayDraft,
+} from "@/components/PlayPickleballPanel";
 import { effectiveClientDiscount, normalizeCategoryName, isAvulsoCategoryName } from "@/lib/category";
 import {
   COURT_MAP_BOOKING_SELECT,
@@ -310,6 +315,10 @@ export function CourtBookingDialog({
   const [viewShowPlayers, setViewShowPlayers] = useState<boolean>(false);
   // Painel "Play pickleball" na tela de detalhes.
   const [viewShowPlay, setViewShowPlay] = useState<boolean>(false);
+  // Reserva nova já como Play: o painel monta o rascunho e, ao salvar, a
+  // reserva é criada e os plays/lançamentos registrados nela.
+  const [createPlay, setCreatePlay] = useState<boolean>(false);
+  const [playDraft, setPlayDraft] = useState<PlayDraft | null>(null);
   // Jogo de ranking: lançamento pendente (valor zerado) criado automaticamente
   // ao marcar o jogo no mapa — finalizar aqui atualiza esse registro em vez
   // de criar um novo. payTargetClientId permite escolher quem paga (cliente
@@ -476,6 +485,8 @@ export function CourtBookingDialog({
     setPayDirection("");
     setPayReceived(false);
     setWantsPayment(false);
+    setCreatePlay(false);
+    setPlayDraft(null);
     setPayAmount2("");
     setPayMethod2("");
     setPayDirection2("");
@@ -781,6 +792,24 @@ export function CourtBookingDialog({
     const startTime = hoursToTime(startHour);
     const endTime = hoursToTime(endHour);
 
+    const usingCreatePlay = kind === "avulsa" && createPlay && isPickleballCourt(court);
+    const createPlayCtx = {
+      bookingDate,
+      court,
+      startTime,
+      endTime,
+      players: createPlayPlayers,
+      payCategoryId: avulsoCategoryId,
+    };
+    if (usingCreatePlay) {
+      const err = playDraft ? validatePlayDraft(createPlayCtx, playDraft) : "Aguarde o painel do Play carregar.";
+      if (err) {
+        setSubmitting(false);
+        toast.error(err);
+        return;
+      }
+    }
+
     if (kind === "fixo") {
       if (!clientId) {
         setSubmitting(false);
@@ -1054,6 +1083,16 @@ export function CourtBookingDialog({
       const rows = uniqueParticipants.map((cid) => ({ booking_id: inserted.id, client_id: cid }));
       const { error: pErr } = await supabase.from("court_booking_participants").insert(rows);
       if (pErr) toast.error(`Locação criada, mas falhou salvar participantes: ${pErr.message}`);
+    }
+
+    if (usingCreatePlay && inserted?.id && playDraft) {
+      const r = await commitPlay(inserted.id, createPlayCtx, playDraft);
+      if (r.error) toast.error(`Locação criada, mas: ${r.error}`);
+      else
+        toast.success(
+          `${r.plays} play(s) usado(s)` +
+            (r.charged > 0 ? ` · ${fmtBRL(r.charged)} lançado(s) no caixa` : ""),
+        );
     }
 
     // Mostra a locação no mapa já agora; a recarga completa (onSaved, lá no
@@ -2182,6 +2221,23 @@ export function CourtBookingDialog({
       categories.find((c) => c.id === (existing?.category_id ?? ""))?.name ??
       null,
   );
+  // Play na reserva nova: titular + jogadores adicionais escolhidos.
+  const createPlayPlayers: { id: string; name: string }[] = Array.from(
+    new Set([clientId, ...extraClientIds].filter((id): id is string => !!id)),
+  ).map((id) => ({ id, name: clients.find((c) => c.id === id)?.full_name ?? "Cliente" }));
+  const avulsoCategoryId = categories.find((c) => isAvulsoCategoryName(c.name))?.id ?? null;
+  const fullCourtPrice = (c: number, date: string, start: string, end: string) => {
+    const calc = calcPrice({
+      bands: priceBands,
+      weekday: weekdayOfISO(date),
+      startTime: start,
+      endTime: end,
+      categoryId: avulsoCategoryId,
+      court: c,
+      date,
+    });
+    return calc && calc.matched ? calc.total : 0;
+  };
   const viewPlayers: { id: string; name: string }[] = (() => {
     if (!existing) return [];
     const list: { id: string; name: string }[] = [];
@@ -3356,20 +3412,8 @@ export function CourtBookingDialog({
                   startTime={existing.start_time}
                   endTime={existing.end_time}
                   players={viewPlayers}
-                  courtPrice={(() => {
-                    const avulsoCat = categories.find((c) => isAvulsoCategoryName(c.name));
-                    const calc = calcPrice({
-                      bands: priceBands,
-                      weekday: weekdayOfISO(bookingDate),
-                      startTime: existing.start_time,
-                      endTime: existing.end_time,
-                      categoryId: avulsoCat?.id ?? null,
-                      court: existing.court,
-                      date: bookingDate,
-                    });
-                    return calc && calc.matched ? calc.total : 0;
-                  })()}
-                  payCategoryId={categories.find((c) => isAvulsoCategoryName(c.name))?.id ?? null}
+                  courtPrice={fullCourtPrice(existing.court, bookingDate, existing.start_time, existing.end_time)}
+                  payCategoryId={avulsoCategoryId}
                   onDone={() => {
                     setViewShowPlay(false);
                     onSaved();
@@ -4167,8 +4211,38 @@ export function CourtBookingDialog({
 
 
 
+            {/* 7b. Play pickleball (avulsa em quadra de pickleball) */}
+            {kind === "avulsa" && isPickleballCourt(court) && (
+              <div className="space-y-3 rounded-md border p-3 bg-muted/30">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <Checkbox
+                    checked={createPlay}
+                    onCheckedChange={(v) => {
+                      setCreatePlay(v === true);
+                      if (v === true) setWantsPayment(false);
+                      else setPlayDraft(null);
+                    }}
+                  />
+                  É play (aluno com Play pickleball)
+                </label>
+                {createPlay && (
+                  <PlayPickleballPanel
+                    bookingId={null}
+                    bookingDate={bookingDate}
+                    court={court}
+                    startTime={hoursToTime(startHour)}
+                    endTime={hoursToTime(endHour)}
+                    players={createPlayPlayers}
+                    courtPrice={fullCourtPrice(court, bookingDate, hoursToTime(startHour), hoursToTime(endHour))}
+                    payCategoryId={avulsoCategoryId}
+                    onDraftChange={setPlayDraft}
+                  />
+                )}
+              </div>
+            )}
+
             {/* 8. Lançamento no caixa (apenas avulsa) */}
-            {kind === "avulsa" && (
+            {kind === "avulsa" && !(createPlay && isPickleballCourt(court)) && (
               <div className="space-y-3 rounded-md border p-3 bg-muted/30">
                 <label className="flex items-center gap-2 text-sm font-medium">
                   <Checkbox
