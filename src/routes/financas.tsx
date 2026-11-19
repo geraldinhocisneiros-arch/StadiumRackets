@@ -38,7 +38,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { EditPaymentDialog } from "@/components/EditPaymentDialog";
 import { NewPaymentDialog } from "@/components/NewPaymentDialog";
 import { useUrlState } from "@/hooks/useUrlState";
-import { PAYMENT_METHOD_LABELS as METHOD_LABELS, PAYMENT_METHOD_OPTIONS } from "@/lib/payment-methods";
+import { PAYMENT_METHOD_LABELS as METHOD_LABELS, PAYMENT_METHOD_FILTER_OPTIONS } from "@/lib/payment-methods";
 
 export const Route = createFileRoute("/financas")({
   validateSearch: (s: Record<string, unknown>) => ({
@@ -499,7 +499,7 @@ function FinancasPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL}>Todas as formas</SelectItem>
-                {PAYMENT_METHOD_OPTIONS.map(([value, label]) => (
+                {PAYMENT_METHOD_FILTER_OPTIONS.map(([value, label]) => (
                   <SelectItem key={value} value={value}>
                     {label}
                   </SelectItem>

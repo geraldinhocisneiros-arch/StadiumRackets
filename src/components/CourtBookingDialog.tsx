@@ -737,6 +737,14 @@ export function CourtBookingDialog({
       toast.error("Escolha a forma de pagamento pra receber o débito em aberto junto.");
       return;
     }
+    if (wantsPayment && payReceived && !payMethod) {
+      toast.error("Pagamento recebido: escolha a forma de pagamento (Dinheiro, Pix, Débito ou Crédito).");
+      return;
+    }
+    if (wantsPayment2 && payReceived2 && !payMethod2) {
+      toast.error("Pagamento recebido: escolha a forma de pagamento (Dinheiro, Pix, Débito ou Crédito).");
+      return;
+    }
     setSubmitting(true);
     const startTime = hoursToTime(startHour);
     const endTime = hoursToTime(endHour);
@@ -1825,6 +1833,10 @@ export function CourtBookingDialog({
         return;
       }
     }
+    if (wantsPayment && payReceived && !payMethod) {
+      toast.error("Pagamento recebido: escolha a forma de pagamento (Dinheiro, Pix, Débito ou Crédito).");
+      return;
+    }
     setSubmitting(true);
     const startTime = hoursToTime(startHour);
     const endTime = hoursToTime(endHour);
@@ -2111,6 +2123,10 @@ export function CourtBookingDialog({
     const debtToReceive = payDirection !== "debito" ? receiveOpenDebtAmount(receiveDebt) : 0;
     if (debtToReceive > 0 && !payMethod) {
       toast.error("Escolha a forma de pagamento pra receber o débito em aberto junto.");
+      return;
+    }
+    if (payReceived && !payMethod) {
+      toast.error("Pagamento recebido: escolha a forma de pagamento (Dinheiro, Pix, Débito ou Crédito).");
       return;
     }
     setSubmitting(true);
@@ -3219,14 +3235,14 @@ export function CourtBookingDialog({
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox
                           checked={payDirection === "debito"}
-                          onCheckedChange={(v) => setPayDirection(v === true ? "debito" : "")}
+                          onCheckedChange={(v) => { setPayDirection(v === true ? "debito" : ""); if (v === true) setPayReceived(false); }}
                         />
                         Debitar da conta corrente
                       </label>
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox
                           checked={payReceived}
-                          onCheckedChange={(v) => setPayReceived(v === true)}
+                          onCheckedChange={(v) => { setPayReceived(v === true); if (v === true) setPayDirection(""); }}
                         />
                         Pagamento recebido
                       </label>
@@ -3850,14 +3866,14 @@ export function CourtBookingDialog({
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox
                           checked={payDirection === "debito"}
-                          onCheckedChange={(v) => setPayDirection(v === true ? "debito" : "")}
+                          onCheckedChange={(v) => { setPayDirection(v === true ? "debito" : ""); if (v === true) setPayReceived(false); }}
                         />
                         Debitar da conta corrente
                       </label>
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox
                           checked={payReceived}
-                          onCheckedChange={(v) => setPayReceived(v === true)}
+                          onCheckedChange={(v) => { setPayReceived(v === true); if (v === true) setPayDirection(""); }}
                         />
                         Pagamento recebido
                       </label>
@@ -3936,14 +3952,14 @@ export function CourtBookingDialog({
                           <label className="flex items-center gap-2 text-sm">
                             <Checkbox
                               checked={payDirection2 === "debito"}
-                              onCheckedChange={(v) => setPayDirection2(v === true ? "debito" : "")}
+                              onCheckedChange={(v) => { setPayDirection2(v === true ? "debito" : ""); if (v === true) setPayReceived2(false); }}
                             />
                             Debitar da conta corrente
                           </label>
                           <label className="flex items-center gap-2 text-sm">
                             <Checkbox
                               checked={payReceived2}
-                              onCheckedChange={(v) => setPayReceived2(v === true)}
+                              onCheckedChange={(v) => { setPayReceived2(v === true); if (v === true) setPayDirection2(""); }}
                             />
                             Pagamento recebido
                           </label>
@@ -4216,14 +4232,14 @@ function EditBookingForm(props: {
           <label className="flex items-center gap-2 text-sm">
             <Checkbox
               checked={props.payDirection === "debito"}
-              onCheckedChange={(v) => props.setPayDirection(v === true ? "debito" : "")}
+              onCheckedChange={(v) => { props.setPayDirection(v === true ? "debito" : ""); if (v === true) props.setPayReceived(false); }}
             />
             Debitar da conta corrente
           </label>
           <label className="flex items-center gap-2 text-sm">
             <Checkbox
               checked={props.payReceived}
-              onCheckedChange={(v) => props.setPayReceived(v === true)}
+              onCheckedChange={(v) => { props.setPayReceived(v === true); if (v === true) props.setPayDirection(""); }}
             />
             Pagamento recebido
           </label>

@@ -2,7 +2,7 @@ import { fmtBRL } from "@/lib/format";
 import {
   PAYMENT_METHOD_LABELS as METHOD_LABELS,
   CLOSING_METHODS,
-  closingMethodOf,
+  isClosingExcluded,
 } from "@/lib/payment-methods";
 import { courtShort } from "@/lib/court-map";
 
@@ -144,7 +144,7 @@ export function buildClosingDocumentHtml(rec: ClosingRecord, opts?: { autoPrint?
   // Itemized payments grouped by method
   const items = (rec.received_items ?? [])
     .filter((p) => Number(p.amount) > 0)
-    .map((p) => ({ ...p, method: closingMethodOf(p.method) ?? p.method }));
+    .filter((p) => !isClosingExcluded(p.method));
   let itemsHtml = "";
   if (items.length) {
     const sorted = [...items].sort((a, b) => {
