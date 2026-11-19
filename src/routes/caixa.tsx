@@ -48,6 +48,7 @@ import {
 import {
   PAYMENT_METHOD_LABELS as METHOD_LABELS,
   PAYMENT_METHOD_OPTIONS as METHOD_OPTIONS,
+  MENSALISTA_CREDITO_COM_QUADRA_MSG,
 } from "@/lib/payment-methods";
 
 export const Route = createFileRoute("/caixa")({
@@ -798,6 +799,12 @@ function CaixaPage() {
       toast.error("Mensalista com Crédito exige uma forma de pagamento.");
       return;
     }
+    // Crédito em C/C de mensalista é saldo ADIANTADO (ex.: mensalidade).
+    // Locação paga na hora (com quadra/horário) é só "Pagamento recebido".
+    if (submitCatNorm === "mensalista" && form.accountDirection === "credito" && (form.court || form.startTime)) {
+      toast.error(MENSALISTA_CREDITO_COM_QUADRA_MSG, { duration: 10000 });
+      return;
+    }
     if ((submitCatNorm === "ranking masculino" || submitCatNorm === "ranking feminino") && (!form.court || !form.startTime)) {
       toast.error("Para Ranking, informe a quadra e o horário de início.");
       return;
@@ -1137,6 +1144,12 @@ function CaixaPage() {
     }
     if (editCatNorm === "mensalista" && editForm.accountDirection === "credito" && !editForm.method) {
       toast.error("Mensalista com Crédito exige uma forma de pagamento.");
+      return;
+    }
+    // Crédito em C/C de mensalista é saldo ADIANTADO (ex.: mensalidade).
+    // Locação paga na hora (com quadra/horário) é só "Pagamento recebido".
+    if (editCatNorm === "mensalista" && editForm.accountDirection === "credito" && (editForm.court || editForm.startTime)) {
+      toast.error(MENSALISTA_CREDITO_COM_QUADRA_MSG, { duration: 10000 });
       return;
     }
     if ((editCatNorm === "ranking masculino" || editCatNorm === "ranking feminino") && (!editForm.court || !editForm.startTime)) {

@@ -35,24 +35,15 @@ import { Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { logAction } from "@/lib/audit";
 import { isSaldoAnterior, isEstorno } from "@/lib/category";
 import { cn } from "@/lib/utils";
-import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/payment-methods";
+import {
+  PAYMENT_METHOD_LABELS as METHOD_LABELS,
+  CLOSING_METHODS,
+  closingMethodOf,
+} from "@/lib/payment-methods";
 
 
-const METHODS_ORDER = [
-  "dinheiro",
-  "pix",
-  "debito",
-  "credito",
-  "transferencia",
-  "letzplay_pix",
-  "letzplay_cartao",
-  "rede_itau",
-  "mercadopago",
-  "conta_corrente",
-  "outro",
-];
-
-const EXCLUDED_FROM_CASH = ["transferencia", "conta_corrente"];
+// Mesmas formas e mesma ordem do Caixa (src/lib/payment-methods.ts).
+const METHODS_ORDER = CLOSING_METHODS;
 
 interface PendingRow {
   id: string;
@@ -216,6 +207,8 @@ export function CashClosingDialog({
           .filter((p) => p.received === true)
           .map((p) => ({
             ...p,
+            // Agrupa nas formas do Caixa (ex.: Mercado Pago online → Mercado Pago).
+            method: closingMethodOf(p.method) ?? p.method,
             clientName: p.client_id ? clientMap[p.client_id] ?? "—" : "Sem cliente",
           })),
       );
@@ -280,16 +273,9 @@ export function CashClosingDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [received, catNameById]);
 
-  const methodsToShow = useMemo(() => {
-    const set = new Set<string>(METHODS_ORDER);
-    Object.keys(systemTotals).forEach((k) => set.add(k));
-    return Array.from(set);
-  }, [systemTotals]);
-
-  const methodsToShowCash = useMemo(
-    () => methodsToShow.filter((m) => !EXCLUDED_FROM_CASH.includes(m)),
-    [methodsToShow]
-  );
+  // Linhas do fechamento = formas do Caixa. Conta corrente/transferência
+  // não são conferidas no caixa e ficam fora (closingMethodOf).
+  const methodsToShowCash = METHODS_ORDER;
 
   const allPendingResolved = pending.every((p) => p.resolution !== "pending");
 
@@ -319,7 +305,7 @@ export function CashClosingDialog({
           {
             id: p.id,
             amount: p.amount,
-            method: p.method,
+            method: closingMethodOf(p.method) ?? p.method,
             received: true,
             category_id: p.category_id,
             client_id: p.client_id,
