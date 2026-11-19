@@ -2195,7 +2195,7 @@ function CaixaPage() {
               )}
               {!eligible && (
                 <p className="text-xs text-muted-foreground">
-                  Crédito/Débito em conta corrente disponível apenas para categorias <strong>Mensalista</strong>, <strong>Débito avulso</strong>, <strong>Saldo anterior</strong> ou <strong>crédito GYMPASS</strong>.
+                  Crédito/Débito em conta corrente disponível apenas para categorias <strong>Mensalista</strong>, <strong>Débito avulso</strong> ou <strong>Saldo anterior</strong>.
                 </p>
               )}
             </div>

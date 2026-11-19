@@ -48,7 +48,6 @@ interface Client {
   active: boolean;
   category_id: string | null;
   financial_responsible: string | null;
-  is_gympass: boolean;
   notes: string | null;
   default_discount_percent: number | null;
   teacher_id: string | null;
@@ -77,7 +76,6 @@ function ClientesPage() {
   const [search, setSearch] = useUrlState<string>("q", "");
   const [showInactive, setShowInactive] = useUrlState<boolean>("inactive", false);
   const [balanceFilter, setBalanceFilter] = useUrlState<"all" | "credit" | "low_credit" | "debit">("balance", "all");
-  const [gympassFilter, setGympassFilter] = useUrlState<"all" | "gympass" | "non_gympass">("gympass", "all");
   const [categoryFilter, setCategoryFilter] = useUrlState<string>("cat", "all");
   const [letterFrom, setLetterFrom] = useUrlState<string>("letterFrom", "all");
   const [letterTo, setLetterTo] = useUrlState<string>("letterTo", "all");
@@ -87,7 +85,7 @@ function ClientesPage() {
     const [cli, { data: cats }] = await Promise.all([
       fetchAll<Client>(
         "clients",
-        "id, full_name, phone, email, due_day, active, category_id, financial_responsible, is_gympass, notes, default_discount_percent, teacher_id, custom_amount",
+        "id, full_name, phone, email, due_day, active, category_id, financial_responsible, notes, default_discount_percent, teacher_id, custom_amount",
       ),
       supabase.from("client_categories").select("id, name").order("name"),
     ]);
@@ -131,9 +129,6 @@ function ClientesPage() {
         (balanceFilter === "credit" && c.balance > 0) ||
         (balanceFilter === "low_credit" && c.balance > 0 && c.balance <= 250) ||
         (balanceFilter === "debit" && c.balance < 0)) &&
-      (gympassFilter === "all" ||
-        (gympassFilter === "gympass" && c.is_gympass) ||
-        (gympassFilter === "non_gympass" && !c.is_gympass)) &&
       (categoryFilter === "all" ||
         (categoryFilter === "none" && !c.category_id) ||
         c.category_id === categoryFilter) &&
@@ -189,8 +184,6 @@ function ClientesPage() {
     if (balanceFilter === "credit") filterDesc.push("Com crédito");
     else if (balanceFilter === "low_credit") filterDesc.push("Crédito ≤ R$ 250");
     else if (balanceFilter === "debit") filterDesc.push("Com débito");
-    if (gympassFilter === "gympass") filterDesc.push("Apenas Gympass");
-    else if (gympassFilter === "non_gympass") filterDesc.push("Sem Gympass");
     if (categoryFilter !== "all") {
       const catName = categoryFilter === "none"
         ? "Sem categoria"
@@ -219,7 +212,6 @@ function ClientesPage() {
         <td>${escapeHtml(categoryName(c.category_id))}</td>
         <td>${escapeHtml(c.phone ?? "—")}</td>
         <td>${c.due_day ? `Dia ${c.due_day}` : "—"}</td>
-        <td style="text-align:center;">${c.is_gympass ? "Sim" : "—"}</td>
         <td style="text-align:right;${balanceColor}">${fmtBRL(c.balance)}</td>
         <td>${c.active ? "Ativo" : "Inativo"}</td>
       </tr>`;
@@ -242,7 +234,7 @@ function ClientesPage() {
   <div class="total">Em dia: <strong>${summary.okCount}</strong> • Devendo: <strong>${summary.debtCount}</strong> (${fmtBRL(summary.debtTotal)})</div>
   ${showCreditTotal ? `<div class="total"><strong>Total de crédito:</strong> ${fmtBRL(totalCredit)}</div>` : ""}
   <table>
-    <thead><tr><th>Nome</th><th>Categoria</th><th>Telefone</th><th>Vencimento</th><th style="text-align:center">Gympass</th><th style="text-align:right">Saldo</th><th>Status</th></tr></thead>
+    <thead><tr><th>Nome</th><th>Categoria</th><th>Telefone</th><th>Vencimento</th><th style="text-align:right">Saldo</th><th>Status</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
   <script>window.onload=()=>{window.print();}</script>
@@ -336,16 +328,6 @@ function ClientesPage() {
                   <SelectItem value="debit">Com débito</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={gympassFilter} onValueChange={(v) => setGympassFilter(v as "all" | "gympass" | "non_gympass")}>
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue placeholder="Gympass" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="gympass">Apenas Gympass</SelectItem>
-                  <SelectItem value="non_gympass">Sem Gympass</SelectItem>
-                </SelectContent>
-              </Select>
               <div className="flex items-center gap-2">
                 <Switch id="inactive" checked={showInactive} onCheckedChange={setShowInactive} />
                 <Label htmlFor="inactive" className="cursor-pointer">
@@ -412,7 +394,6 @@ function ClientesPage() {
                     <TableHead>Categoria</TableHead>
                     <TableHead>Telefone</TableHead>
                     <TableHead>Vencimento</TableHead>
-                    <TableHead className="text-center">Gympass</TableHead>
                     <TableHead className="text-right">Saldo</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead></TableHead>
@@ -450,13 +431,6 @@ function ClientesPage() {
                         <TableCell className="text-sm text-muted-foreground">{categoryName(c.category_id)}</TableCell>
                         <TableCell className="text-sm">{c.phone ?? "—"}</TableCell>
                         <TableCell>{c.due_day ? `Dia ${c.due_day}` : "—"}</TableCell>
-                        <TableCell className="text-center">
-                          {c.is_gympass ? (
-                            <Badge className="bg-purple-600 hover:bg-purple-600 text-white">Gympass</Badge>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">—</span>
-                          )}
-                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             <span
@@ -528,7 +502,7 @@ function ClientesPage() {
                   })}
                   {filtered.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                         Nenhum cliente encontrado.
                       </TableCell>
                     </TableRow>
@@ -572,7 +546,6 @@ export function ClientDialog({
   const [active, setActive] = useState(true);
   const [categoryId, setCategoryId] = useState<string>("none");
   const [financialResponsible, setFinancialResponsible] = useState("");
-  const [isGympass, setIsGympass] = useState(false);
   const [notes, setNotes] = useState("");
   const [defaultDiscountPercent, setDefaultDiscountPercent] = useState("");
   const [customAmount, setCustomAmount] = useState("");
@@ -601,7 +574,6 @@ export function ClientDialog({
       setActive(editing?.active ?? true);
       setCategoryId(editing?.category_id ?? "none");
       setFinancialResponsible(editing?.financial_responsible ?? "");
-      setIsGympass(editing?.is_gympass ?? false);
       setNotes(editing?.notes ?? "");
       setDefaultDiscountPercent(
         editing?.default_discount_percent && editing.default_discount_percent > 0
@@ -715,7 +687,6 @@ export function ClientDialog({
       active,
       category_id: categoryId === "none" ? null : categoryId,
       financial_responsible: financialResponsible.trim() || null,
-      is_gympass: isGympass,
       notes: notes.trim() || null,
       default_discount_percent: Math.min(Math.max(Number(defaultDiscountPercent) || 0, 0), 100),
       custom_amount: customAmount.trim() === "" ? null : Number(customAmount) || 0,
@@ -960,12 +931,6 @@ export function ClientDialog({
               Sobrescreve o valor padrão da categoria nos lançamentos deste cliente — usado, por
               exemplo, para o valor de mensalista sugerido no Caixa.
             </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Switch id="gympass" checked={isGympass} onCheckedChange={setIsGympass} />
-            <Label htmlFor="gympass" className="cursor-pointer">
-              Gympass
-            </Label>
           </div>
           <div className="flex items-center gap-2">
             <Switch id="active" checked={active} onCheckedChange={setActive} />
