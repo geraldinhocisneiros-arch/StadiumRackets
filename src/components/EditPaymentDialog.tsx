@@ -30,6 +30,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { toast } from "sonner";
+import { isStockCategory, isAvulsoCategoryName } from "@/lib/category";
 import { Loader2, Check, ChevronsUpDown, X, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logAction } from "@/lib/audit";
@@ -54,6 +55,7 @@ interface CategoryRow {
   id: string;
   name: string;
   default_amount: number;
+  stock_item_id?: string | null;
 }
 
 interface FormState {
@@ -96,7 +98,7 @@ const emptyForm = (): FormState => ({
 
 
 
-import { COURTS, courtLabel } from "@/lib/court-map";
+import { COURTS, courtLabel, isRankingCategoryName } from "@/lib/court-map";
 const NONE_VALUE = "__none__";
 
 export interface EditPaymentDialogProps {
@@ -129,7 +131,7 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
           "clients",
           "id, full_name, custom_amount, category_id, active, client_categories(name, default_amount)",
         ),
-        supabase.from("client_categories").select("id, name, default_amount").eq("active", true).order("name"),
+        supabase.from("client_categories").select("id, name, default_amount, stock_item_id").eq("active", true).order("name"),
         supabase.from("profiles").select("id, full_name").order("full_name"),
         supabase.from("price_table").select("id, categories, weekday, start_time, end_time, price_per_hour, courts, starts_on, ends_on"),
       ]);
@@ -243,7 +245,7 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
       toast.error(MENSALISTA_CREDITO_COM_QUADRA_MSG, { duration: 10000 });
       return;
     }
-    if ((catSelNorm === "ranking masculino" || catSelNorm === "ranking feminino") && (!form.court || !form.startTime)) {
+    if ((isRankingCategoryName(catSelNorm)) && (!form.court || !form.startTime)) {
       toast.error("Para Ranking, informe a quadra e o horário de início.");
       return;
     }
@@ -266,7 +268,7 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
     }
     setSubmitting(true);
     const isGympass = catSelNorm === "credito gympass";
-    const isStockCat = catSelNorm === "grip" || catSelNorm === "terno de bola";
+    const isStockCat = isStockCategory(categories.find((c) => c.id === form.categoryId));
     const qtyNum = isStockCat ? Math.max(1, parseInt(form.quantity, 10) || 1) : 1;
     // Busca o usuário logado agora (não o do contexto, que pode estar
     // desatualizado num computador compartilhado onde outro recepcionista
@@ -283,8 +285,12 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
       start_time: form.startTime || null,
       end_time: form.endTime || null,
       court: form.court ? Number(form.court) : null,
+      // Débito na conta não é dinheiro recebido (o pagamento entra depois
+      // como crédito, pelo botão "Receber" no Caixa).
       received:
-        catSelNorm === "ranking masculino" || catSelNorm === "ranking feminino"
+        form.accountDirection === "debito"
+          ? false
+          : isRankingCategoryName(catSelNorm)
           ? form.received
           : (Number(form.amount) || 0) === 0
             ? true
@@ -324,7 +330,7 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
     .toLowerCase()
     .trim();
   const isEstorno = catNorm === "estorno";
-  const isStockCat = catNorm === "grip" || catNorm === "terno de bola";
+  const isStockCat = isStockCategory(cat);
   const isAutoCC = catNorm === "credito gympass";
   const autoCCDirection: "credito" | "debito" = "credito";
   const eligible =
@@ -337,6 +343,7 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
       catNorm === "energia (luz)" ||
       catNorm === "ranking masculino" ||
       catNorm === "ranking feminino" ||
+      catNorm === "ranking dupla" ||
       isEstorno);
   const isCommissionable = catNorm === "mensalista";
   const isMensalistaDebito = catNorm === "mensalista" && form.accountDirection === "debito";
@@ -349,7 +356,7 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
     "tenis de mesa (mensalista)",
     "terno de bola",
     "credito gympass",
-  ].includes(catNorm) || isMensalistaCredito || isEstorno;
+  ].includes(catNorm) || isStockCat || isMensalistaCredito || isEstorno;
   useEffect(() => {
     if (noTimeCourt && (form.court || form.startTime || form.endTime)) {
       setForm((f) => ({ ...f, court: "", startTime: "", endTime: "" }));
@@ -691,7 +698,7 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
                   />
                 </div>
                 <div className={`space-y-2 ${noTimeCourt ? "opacity-50" : ""}`}>
-                  <Label>Quadra {(catNorm === "ranking masculino" || catNorm === "ranking feminino" || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
+                  <Label>Quadra {(isRankingCategoryName(catNorm) || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
                   <div className="flex gap-2">
                     <Select
                       key={form.court === "" ? "empty" : "set"}
@@ -727,7 +734,7 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
 
               <div className="grid grid-cols-2 gap-4">
                 <div className={`space-y-2 ${noTimeCourt ? "opacity-50" : ""}`}>
-                  <Label>Horário de início {(catNorm === "ranking masculino" || catNorm === "ranking feminino" || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
+                  <Label>Horário de início {(isRankingCategoryName(catNorm) || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
                   <Input
                     type="time"
                     value={form.startTime}
@@ -750,8 +757,8 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className={`flex items-center gap-2 rounded-md border p-3 ${isEstorno || isAutoCC ? "opacity-50" : ""}`}>
                     <Checkbox
-                      disabled={isEstorno || isAutoCC}
-                      checked={form.received}
+                      disabled={isEstorno || isAutoCC || form.accountDirection === "debito"}
+                      checked={form.accountDirection !== "debito" && form.received}
                       onCheckedChange={(v) => update({ received: v === true })}
                     />
                     <Label className="cursor-pointer font-normal">Pagamento recebido</Label>
@@ -780,7 +787,9 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
                     <Checkbox
                       disabled={!eligible || isAutoCC || isEstorno}
                       checked={form.accountDirection === "debito"}
-                      onCheckedChange={(v) => update({ accountDirection: v === true ? "debito" : "" })}
+                      onCheckedChange={(v) =>
+                        update(v === true ? { accountDirection: "debito", received: false } : { accountDirection: "" })
+                      }
                     />
                     <Label className="cursor-pointer font-normal text-center leading-tight">Debitar da<br />C/C</Label>
                   </div>
@@ -792,7 +801,7 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
                     <strong>Saldo anterior</strong> ou <strong>crédito GYMPASS</strong>.
                   </p>
                 )}
-                {catNorm === "avulso" && form.clientId && !form.received && (
+                {isAvulsoCategoryName(catNorm) && form.clientId && !form.received && (
                   <p className="text-xs text-amber-600 dark:text-amber-400">
                     Será lançado como débito na conta corrente do cliente até a quitação.
                   </p>

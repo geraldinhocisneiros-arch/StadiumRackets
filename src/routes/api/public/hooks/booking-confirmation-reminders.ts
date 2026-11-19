@@ -107,6 +107,8 @@ export const Route = createFileRoute("/api/public/hooks/booking-confirmation-rem
             .gte("start_time", startParts.time)
             .lte("start_time", endParts.time)
             .not("client_id", "is", null)
+            // Turma de pickleball não pede confirmação: o aluno paga o mês.
+            .is("class_id", null)
             .or(`valid_from.is.null,valid_from.lte.${targetDate}`)
             .or(`valid_until.is.null,valid_until.gte.${targetDate}`);
 

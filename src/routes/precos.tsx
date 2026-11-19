@@ -175,6 +175,7 @@ function PrecosPage() {
               </Button>
             </DialogTrigger>
             <BandDialog
+              open={open}
               editing={editing}
               categories={categories}
               onSaved={load}
@@ -277,11 +278,13 @@ function PrecosPage() {
 }
 
 function BandDialog({
+  open,
   editing,
   categories,
   onSaved,
   onClose,
 }: {
+  open: boolean;
   editing: PriceBand | null;
   categories: CategoryRow[];
   onSaved: () => void;
@@ -301,6 +304,7 @@ function BandDialog({
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    if (!open) return;
     setSelectedCategories(editing?.categories ?? []);
     setWeekdays(editing ? [editing.weekday] : [1, 2, 3, 4]);
     setStartTime(editing?.start_time ? editing.start_time.slice(0, 5) : "");
@@ -317,7 +321,7 @@ function BandDialog({
     setDiscountPercent(editing?.discount_percent != null ? String(editing.discount_percent) : "");
     setStartsOn(editing?.starts_on ?? "");
     setEndsOn(editing?.ends_on ?? "");
-  }, [editing]);
+  }, [editing, open]);
 
   const toggleWeekday = (wd: number) => {
     setWeekdays((prev) => (prev.includes(wd) ? prev.filter((x) => x !== wd) : [...prev, wd]));

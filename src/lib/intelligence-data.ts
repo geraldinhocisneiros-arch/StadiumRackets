@@ -1,3 +1,4 @@
+import { registerLojinhaCategories } from "@/lib/category";
 import { fetchAll } from "@/lib/fetchAll";
 import { todayISO } from "@/lib/format";
 import { isManutencaoClientName } from "@/lib/court-map";
@@ -22,7 +23,10 @@ export async function loadIntelData(): Promise<IntelData> {
     failures,
     teachers,
   ] = await Promise.all([
-    fetchAll<IntelData["categories"][number]>("client_categories", "id, name"),
+    fetchAll<IntelData["categories"][number] & { stock_item_id?: string | null }>(
+      "client_categories",
+      "id, name, stock_item_id",
+    ),
     fetchAll<IntelData["clients"][number]>(
       "clients",
       "id, full_name, phone, category_id, active, created_at, teacher_id",
@@ -70,6 +74,7 @@ export async function loadIntelData(): Promise<IntelData> {
     ).catch(() => []),
     fetchAll<IntelData["teachers"][number]>("teachers", "id, name"),
   ]);
+  registerLojinhaCategories(categories);
   return {
     categories,
     clients,

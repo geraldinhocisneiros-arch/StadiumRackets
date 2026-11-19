@@ -111,6 +111,10 @@ export const SOURCE_COLOR: Record<string, string> = {
 export const FIXED_COLOR =
   "bg-green-800/20 border-green-900/30 text-green-950 dark:text-green-100";
 
+// Turma fixa de pickleball (mensalidade única, sem cobrança por aula).
+export const CLASS_COLOR =
+  "bg-violet-300/40 border-violet-500/50 text-violet-950 dark:bg-violet-500/25 dark:text-violet-50";
+
 export interface BookingParticipant {
   client_id: string;
   full_name: string;
@@ -162,7 +166,7 @@ export const isMovedFromFixedBooking = (b: Booking): boolean =>
 export const isImportedPlaceholderNote = (notes: string | null | undefined): boolean =>
   typeof notes === "string" && /^\s*importado\s+planilha\b/i.test(notes);
 
-export const RANKING_CATEGORY_NAMES = ["ranking masculino", "ranking feminino"];
+export const RANKING_CATEGORY_NAMES = ["ranking masculino", "ranking feminino", "ranking dupla"];
 const normalizeCategory = (name: string | null | undefined): string =>
   (name ?? "")
     .normalize("NFD")
@@ -177,6 +181,9 @@ export const isRankingMasculinoName = (name: string | null | undefined): boolean
   normalizeCategory(name) === "ranking masculino";
 export const isRankingFemininoName = (name: string | null | undefined): boolean =>
   normalizeCategory(name) === "ranking feminino";
+// Ranking de duplas: jogo de 4 clientes (2 duplas), sem professor.
+export const isRankingDuplaName = (name: string | null | undefined): boolean =>
+  normalizeCategory(name) === "ranking dupla";
 export const isManutencaoName = (name: string | null | undefined): boolean =>
   normalizeCategory(name) === "manutencao";
 
@@ -192,6 +199,8 @@ export const RANKING_MASC_COLOR =
   "bg-amber-900/25 border-amber-900/50 text-amber-950 dark:text-amber-100";
 export const RANKING_FEM_COLOR =
   "bg-pink-400/25 border-pink-500/50 text-pink-950 dark:text-pink-100";
+export const RANKING_DUPLA_COLOR =
+  "bg-violet-500/20 border-violet-600/50 text-violet-950 dark:text-violet-100";
 export const MANUTENCAO_COLOR =
   "bg-red-500/20 border-red-600/60 text-red-950 dark:bg-red-500/15 dark:text-red-100";
 
@@ -233,6 +242,7 @@ export const bookingCellColorClass = (
   if (isManutencaoName(categoryName)) return MANUTENCAO_COLOR;
   if (isRankingMasculinoName(categoryName)) return RANKING_MASC_COLOR;
   if (isRankingFemininoName(categoryName)) return RANKING_FEM_COLOR;
+  if (isRankingDuplaName(categoryName)) return RANKING_DUPLA_COLOR;
   return fallback;
 };
 
@@ -267,6 +277,11 @@ export interface FixedSchedule {
   day_note?: string | null;
   // Portal professor: marcado como próprio quando o cliente é vinculado ao professor
   is_own?: boolean;
+  // Matrícula de turma de pickleball (ver src/lib/pickleball-classes.ts):
+  // ocupa a quadra, mas não gera cobrança por aula.
+  class_id?: string | null;
+  class_monthly_amount?: number | null;
+  pickleball_classes?: { id: string; name: string } | null;
 }
 
 // Retorna a exceção que cobre a hora informada (ou null se não houver).

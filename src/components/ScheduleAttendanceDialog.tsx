@@ -244,6 +244,7 @@ export function ScheduleAttendanceDialog({
       const win = info.billWindow(h);
       const r = computeAttendanceAmount({
         bands: priceBands,
+        categoryId: mensalistaCategoryId,
         date,
         startTime: win.start,
         endTime: win.end,
@@ -291,6 +292,7 @@ export function ScheduleAttendanceDialog({
         const win = info.billWindow(h);
         const bill = computeAttendanceAmount({
           bands: priceBands,
+          categoryId: mensalistaCategoryId,
           date,
           startTime: win.start,
           endTime: win.end,
@@ -356,6 +358,7 @@ export function ScheduleAttendanceDialog({
         const win = info.billWindow(h);
         const bill = computeAttendanceAmount({
           bands: priceBands,
+          categoryId: mensalistaCategoryId,
           date,
           startTime: win.start,
           endTime: win.end,
