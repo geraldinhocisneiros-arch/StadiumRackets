@@ -792,6 +792,14 @@ export function CourtBookingDialog({
       toast.error("Escolha a forma de pagamento pra receber o débito em aberto junto.");
       return;
     }
+    if (wantsPayment && payReceived && payDirection !== "debito" && !payMethod) {
+      toast.error("Pagamento recebido: escolha a forma de pagamento (Dinheiro, Pix, Débito ou Crédito).");
+      return;
+    }
+    if (wantsPayment2 && payReceived2 && payDirection2 !== "debito" && !payMethod2) {
+      toast.error("Pagamento recebido: escolha a forma de pagamento (Dinheiro, Pix, Débito ou Crédito).");
+      return;
+    }
     setSubmitting(true);
     const startTime = hoursToTime(startHour);
     const endTime = hoursToTime(endHour);
@@ -1961,6 +1969,10 @@ export function CourtBookingDialog({
         return;
       }
     }
+    if (wantsPayment && payReceived && payDirection !== "debito" && !payMethod) {
+      toast.error("Pagamento recebido: escolha a forma de pagamento (Dinheiro, Pix, Débito ou Crédito).");
+      return;
+    }
     setSubmitting(true);
     const startTime = hoursToTime(startHour);
     const endTime = hoursToTime(endHour);
@@ -2367,6 +2379,10 @@ export function CourtBookingDialog({
     const debtToReceive = payDirection !== "debito" ? receiveOpenDebtAmount(receiveDebt) : 0;
     if (debtToReceive > 0 && !payMethod) {
       toast.error("Escolha a forma de pagamento pra receber o débito em aberto junto.");
+      return;
+    }
+    if (payReceived && payDirection !== "debito" && !payMethod) {
+      toast.error("Pagamento recebido: escolha a forma de pagamento (Dinheiro, Pix, Débito ou Crédito).");
       return;
     }
     setSubmitting(true);
@@ -3596,13 +3612,6 @@ export function CourtBookingDialog({
                       </label>
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox
-                          checked={payDirection === "credito"}
-                          onCheckedChange={(v) => setPayDirection(v === true ? "credito" : "")}
-                        />
-                        Creditar na conta corrente
-                      </label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <Checkbox
                           disabled={payDirection === "debito"}
                           checked={payDirection !== "debito" && payReceived}
                           onCheckedChange={(v) => setPayReceived(v === true)}
@@ -3610,6 +3619,10 @@ export function CourtBookingDialog({
                         Pagamento recebido
                       </label>
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      Pagou a quadra agora? Marque só <strong>Pagamento recebido</strong> — mesmo se for mensalista.
+                      Saldo adiantado (crédito) se lança no Caixa, não aqui.
+                    </p>
                     {!viewIsDupla &&
                       !viewPendingPaymentId &&
                       existingParticipants.some((p) => p.client_id !== existing.client_id) && (
@@ -4318,13 +4331,6 @@ export function CourtBookingDialog({
                       </label>
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox
-                          checked={payDirection === "credito"}
-                          onCheckedChange={(v) => setPayDirection(v === true ? "credito" : "")}
-                        />
-                        Creditar na conta corrente
-                      </label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <Checkbox
                           disabled={payDirection === "debito"}
                           checked={payDirection !== "debito" && payReceived}
                           onCheckedChange={(v) => setPayReceived(v === true)}
@@ -4332,6 +4338,10 @@ export function CourtBookingDialog({
                         Pagamento recebido
                       </label>
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      Pagou a quadra agora? Marque só <strong>Pagamento recebido</strong> — mesmo se for mensalista.
+                      Saldo adiantado (crédito) se lança no Caixa, não aqui.
+                    </p>
                     <div className="text-xs text-muted-foreground">
                       Preencha o valor para gerar automaticamente o lançamento no caixa
                       vinculado ao cliente, categoria, quadra e horário.
@@ -4448,13 +4458,6 @@ export function CourtBookingDialog({
                           </label>
                           <label className="flex items-center gap-2 text-sm">
                             <Checkbox
-                              checked={payDirection2 === "credito"}
-                              onCheckedChange={(v) => setPayDirection2(v === true ? "credito" : "")}
-                            />
-                            Creditar na conta corrente
-                          </label>
-                          <label className="flex items-center gap-2 text-sm">
-                            <Checkbox
                               disabled={payDirection2 === "debito"}
                               checked={payDirection2 !== "debito" && payReceived2}
                               onCheckedChange={(v) => setPayReceived2(v === true)}
@@ -4462,6 +4465,10 @@ export function CourtBookingDialog({
                             Pagamento recebido
                           </label>
                         </div>
+                        <p className="text-xs text-muted-foreground">
+                          Pagou a quadra agora? Marque só <strong>Pagamento recebido</strong> — mesmo se for mensalista.
+                          Saldo adiantado (crédito) se lança no Caixa, não aqui.
+                        </p>
                       </>
                     )}
                   </div>
@@ -4838,13 +4845,6 @@ function EditBookingForm(props: {
           </label>
           <label className="flex items-center gap-2 text-sm">
             <Checkbox
-              checked={props.payDirection === "credito"}
-              onCheckedChange={(v) => props.setPayDirection(v === true ? "credito" : "")}
-            />
-            Creditar na conta corrente
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <Checkbox
               disabled={props.payDirection === "debito"}
               checked={props.payDirection !== "debito" && props.payReceived}
               onCheckedChange={(v) => props.setPayReceived(v === true)}
@@ -4852,6 +4852,10 @@ function EditBookingForm(props: {
             Pagamento recebido
           </label>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Pagou a quadra agora? Marque só <strong>Pagamento recebido</strong> — mesmo se for mensalista.
+          Saldo adiantado (crédito) se lança no Caixa, não aqui.
+        </p>
         <div className="text-xs text-muted-foreground">
           Preencha o valor para gerar automaticamente o lançamento no caixa
           vinculado ao cliente, categoria, quadra e horário.

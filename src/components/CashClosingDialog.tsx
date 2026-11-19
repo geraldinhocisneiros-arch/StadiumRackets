@@ -35,24 +35,15 @@ import { Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { logAction } from "@/lib/audit";
 import { isSaldoAnterior, isEstorno } from "@/lib/category";
 import { cn } from "@/lib/utils";
-import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/payment-methods";
+import {
+  PAYMENT_METHOD_LABELS as METHOD_LABELS,
+  CLOSING_METHODS,
+  closingRows,
+} from "@/lib/payment-methods";
 
 
-const METHODS_ORDER = [
-  "dinheiro",
-  "pix",
-  "debito",
-  "credito",
-  "transferencia",
-  "letzplay_pix",
-  "letzplay_cartao",
-  "rede_itau",
-  "mercadopago",
-  "conta_corrente",
-  "outro",
-];
-
-const EXCLUDED_FROM_CASH = ["transferencia", "conta_corrente"];
+// Mesmas formas e mesma ordem do Caixa (src/lib/payment-methods.ts).
+const METHODS_ORDER = CLOSING_METHODS;
 
 interface PendingRow {
   id: string;
@@ -280,16 +271,9 @@ export function CashClosingDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [received, catNameById]);
 
-  const methodsToShow = useMemo(() => {
-    const set = new Set<string>(METHODS_ORDER);
-    Object.keys(systemTotals).forEach((k) => set.add(k));
-    return Array.from(set);
-  }, [systemTotals]);
-
-  const methodsToShowCash = useMemo(
-    () => methodsToShow.filter((m) => !EXCLUDED_FROM_CASH.includes(m)),
-    [methodsToShow]
-  );
+  // Linhas do fechamento = as 4 formas do Caixa (+ forma antiga/online
+  // só se teve valor no dia). Conta corrente/transferência ficam fora.
+  const methodsToShowCash = useMemo(() => closingRows(systemTotals), [systemTotals]);
 
   const allPendingResolved = pending.every((p) => p.resolution !== "pending");
 

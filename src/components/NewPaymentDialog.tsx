@@ -39,7 +39,10 @@ import { offerWhatsAppPaymentNotification } from "@/lib/whatsapp";
 import { ClientDialog } from "@/routes/clientes";
 import { calcPrice, weekdayFromYmd, fmtHours, type PriceBand } from "@/lib/pricing";
 import { fetchAll } from "@/lib/fetchAll";
-import { PAYMENT_METHOD_OPTIONS as METHOD_OPTIONS } from "@/lib/payment-methods";
+import {
+  PAYMENT_METHOD_OPTIONS as METHOD_OPTIONS,
+  MENSALISTA_CREDITO_COM_QUADRA_MSG,
+} from "@/lib/payment-methods";
 
 interface ClientRow {
   id: string;
@@ -246,6 +249,13 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
       .trim();
     if (catSelNorm === "mensalista" && form.accountDirection === "credito" && !form.method) {
       toast.error("Mensalista com Crédito exige uma forma de pagamento.");
+      return;
+    }
+    // Crédito em C/C de mensalista é saldo ADIANTADO (ex.: mensalidade).
+    // Locação paga na hora tem quadra/horário e deve ser só "Pagamento
+    // recebido" — creditar geraria saldo que não existe.
+    if (catSelNorm === "mensalista" && form.accountDirection === "credito" && (form.court || form.startTime)) {
+      toast.error(MENSALISTA_CREDITO_COM_QUADRA_MSG, { duration: 10000 });
       return;
     }
     if ((isRankingCategoryName(catSelNorm)) && (!form.court || !form.startTime)) {
