@@ -179,9 +179,12 @@ export const Route = createFileRoute("/api/public/webhooks/mercadopago")({
                 end_time: booking.end_time,
                 amount: payment.transaction_amount ?? onlinePayment.amount,
                 method,
+                // Locação paga na hora: dinheiro recebido, sem mexer na conta
+                // corrente. Creditar aqui gerava saldo inexistente para
+                // mensalistas (a locação não tem débito correspondente).
                 received: true,
-                to_account: true,
-                account_direction: "credito",
+                to_account: false,
+                account_direction: null,
                 notes: `Pagamento online via Mercado Pago (ID ${payment.id}) — reserva quadra ${booking.court}.`,
               })
               .select("id")

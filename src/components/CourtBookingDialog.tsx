@@ -3225,19 +3225,16 @@ export function CourtBookingDialog({
                       </label>
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox
-                          checked={payDirection === "credito"}
-                          onCheckedChange={(v) => setPayDirection(v === true ? "credito" : "")}
-                        />
-                        Creditar na conta corrente
-                      </label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <Checkbox
                           checked={payReceived}
                           onCheckedChange={(v) => setPayReceived(v === true)}
                         />
                         Pagamento recebido
                       </label>
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      Pagou a quadra agora? Marque só <strong>Pagamento recebido</strong> — mesmo se for mensalista.
+                      Saldo adiantado (crédito) se lança no Caixa, não aqui.
+                    </p>
                     {payDirection !== "debito" && (
                       <ReceiveOpenDebtOption
                         clientId={payTargetClientId || existing.client_id}
@@ -3859,19 +3856,16 @@ export function CourtBookingDialog({
                       </label>
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox
-                          checked={payDirection === "credito"}
-                          onCheckedChange={(v) => setPayDirection(v === true ? "credito" : "")}
-                        />
-                        Creditar na conta corrente
-                      </label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <Checkbox
                           checked={payReceived}
                           onCheckedChange={(v) => setPayReceived(v === true)}
                         />
                         Pagamento recebido
                       </label>
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      Pagou a quadra agora? Marque só <strong>Pagamento recebido</strong> — mesmo se for mensalista.
+                      Saldo adiantado (crédito) se lança no Caixa, não aqui.
+                    </p>
                     <div className="text-xs text-muted-foreground">
                       Preencha o valor para gerar automaticamente o lançamento no caixa
                       vinculado ao cliente, categoria, quadra e horário.
@@ -3948,19 +3942,16 @@ export function CourtBookingDialog({
                           </label>
                           <label className="flex items-center gap-2 text-sm">
                             <Checkbox
-                              checked={payDirection2 === "credito"}
-                              onCheckedChange={(v) => setPayDirection2(v === true ? "credito" : "")}
-                            />
-                            Creditar na conta corrente
-                          </label>
-                          <label className="flex items-center gap-2 text-sm">
-                            <Checkbox
                               checked={payReceived2}
                               onCheckedChange={(v) => setPayReceived2(v === true)}
                             />
                             Pagamento recebido
                           </label>
                         </div>
+                        <p className="text-xs text-muted-foreground">
+                          Pagou a quadra agora? Marque só <strong>Pagamento recebido</strong> — mesmo se for mensalista.
+                          Saldo adiantado (crédito) se lança no Caixa, não aqui.
+                        </p>
                       </>
                     )}
                   </div>
@@ -4231,19 +4222,16 @@ function EditBookingForm(props: {
           </label>
           <label className="flex items-center gap-2 text-sm">
             <Checkbox
-              checked={props.payDirection === "credito"}
-              onCheckedChange={(v) => props.setPayDirection(v === true ? "credito" : "")}
-            />
-            Creditar na conta corrente
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <Checkbox
               checked={props.payReceived}
               onCheckedChange={(v) => props.setPayReceived(v === true)}
             />
             Pagamento recebido
           </label>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Pagou a quadra agora? Marque só <strong>Pagamento recebido</strong> — mesmo se for mensalista.
+          Saldo adiantado (crédito) se lança no Caixa, não aqui.
+        </p>
         <div className="text-xs text-muted-foreground">
           Preencha o valor para gerar automaticamente o lançamento no caixa
           vinculado ao cliente, categoria, quadra e horário.

@@ -250,6 +250,16 @@ export function NewPaymentDialog({ open, onOpenChange, defaultPaidAt, onSaved }:
       toast.error("Mensalista com Crédito exige uma forma de pagamento.");
       return;
     }
+    // Crédito em C/C de mensalista é saldo ADIANTADO (ex.: mensalidade).
+    // Locação paga na hora tem quadra/horário e deve ser só "Pagamento
+    // recebido" — creditar geraria saldo que não existe.
+    if (catSelNorm === "mensalista" && form.accountDirection === "credito" && (form.court || form.startTime)) {
+      toast.error(
+        "Locação paga na hora não vai para a conta corrente. Desmarque \"Creditar na C/C\" e deixe só \"Pagamento recebido\". Crédito é só para saldo adiantado, sem quadra/horário.",
+        { duration: 10000 },
+      );
+      return;
+    }
     if ((catSelNorm === "ranking masculino" || catSelNorm === "ranking feminino") && (!form.court || !form.startTime)) {
       toast.error("Para Ranking, informe a quadra e o horário de início.");
       return;
