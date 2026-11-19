@@ -48,6 +48,7 @@ import {
 import {
   PAYMENT_METHOD_LABELS as METHOD_LABELS,
   PAYMENT_METHOD_OPTIONS as METHOD_OPTIONS,
+  PAYMENT_METHOD_FILTER_OPTIONS as METHOD_FILTER_OPTIONS,
   MENSALISTA_CREDITO_COM_QUADRA_MSG,
 } from "@/lib/payment-methods";
 
@@ -2071,7 +2072,7 @@ function CaixaPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas as formas</SelectItem>
-                  {METHOD_OPTIONS.map(([v, l]) => (
+                  {METHOD_FILTER_OPTIONS.map(([v, l]) => (
                     <SelectItem key={v} value={v}>{l}</SelectItem>
                   ))}
                 </SelectContent>

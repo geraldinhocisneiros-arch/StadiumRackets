@@ -38,7 +38,7 @@ import { cn } from "@/lib/utils";
 import {
   PAYMENT_METHOD_LABELS as METHOD_LABELS,
   CLOSING_METHODS,
-  closingMethodOf,
+  closingRows,
 } from "@/lib/payment-methods";
 
 
@@ -207,8 +207,6 @@ export function CashClosingDialog({
           .filter((p) => p.received === true)
           .map((p) => ({
             ...p,
-            // Agrupa nas formas do Caixa (ex.: Mercado Pago online → Mercado Pago).
-            method: closingMethodOf(p.method) ?? p.method,
             clientName: p.client_id ? clientMap[p.client_id] ?? "—" : "Sem cliente",
           })),
       );
@@ -273,9 +271,9 @@ export function CashClosingDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [received, catNameById]);
 
-  // Linhas do fechamento = formas do Caixa. Conta corrente/transferência
-  // não são conferidas no caixa e ficam fora (closingMethodOf).
-  const methodsToShowCash = METHODS_ORDER;
+  // Linhas do fechamento = as 4 formas do Caixa (+ forma antiga/online
+  // só se teve valor no dia). Conta corrente/transferência ficam fora.
+  const methodsToShowCash = useMemo(() => closingRows(systemTotals), [systemTotals]);
 
   const allPendingResolved = pending.every((p) => p.resolution !== "pending");
 
@@ -305,7 +303,7 @@ export function CashClosingDialog({
           {
             id: p.id,
             amount: p.amount,
-            method: closingMethodOf(p.method) ?? p.method,
+            method: p.method,
             received: true,
             category_id: p.category_id,
             client_id: p.client_id,
