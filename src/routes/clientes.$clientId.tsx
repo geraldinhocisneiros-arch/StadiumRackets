@@ -83,7 +83,6 @@ interface ClientInfo {
   active: boolean;
   financial_responsible: string | null;
   category_id: string | null;
-  is_gympass: boolean;
   notes: string | null;
   default_discount_percent: number | null;
   teacher_id: string | null;
@@ -158,7 +157,7 @@ function ClientDetailPage() {
       (supabase as any)
         .from("clients")
         .select(
-          "id, full_name, phone, email, due_day, active, financial_responsible, category_id, is_gympass, notes, default_discount_percent, teacher_id, profile_photo_path, profile_photo_updated_at, birth_day, birth_month, tennis_class, custom_amount",
+          "id, full_name, phone, email, due_day, active, financial_responsible, category_id, notes, default_discount_percent, teacher_id, profile_photo_path, profile_photo_updated_at, birth_day, birth_month, tennis_class, custom_amount",
         )
         .eq("id", clientId)
         .maybeSingle(),
@@ -783,15 +782,7 @@ function ClientDetailPage() {
             <div className="text-xs text-muted-foreground">Status</div>
             <div className="font-medium">{client.active ? "Ativo" : "Inativo"}</div>
           </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Gympass</div>
-            <div className="font-medium">
-              {client.is_gympass ? (
-                <Badge className="bg-purple-600 hover:bg-purple-600 text-white">Sim</Badge>
-              ) : (
-                "Não"
-              )}
-            </div>
+          <div className="contents">
             {debtLimitExcepted && (
               <div>
                 <div className="text-xs text-muted-foreground">Exceção</div>

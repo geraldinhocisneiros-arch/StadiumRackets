@@ -85,7 +85,6 @@ interface Row {
   balance: number;
   message_sent: boolean;
   followup_date: string | null;
-  is_gympass: boolean;
   is_debt_limit_excepted: boolean;
   category_id: string | null;
 }
@@ -129,7 +128,6 @@ function InadimplentesPage() {
   const [letterTo, setLetterTo] = useUrlState<string>("letterTo", "all");
   const [sortBy, setSortBy] = useUrlState<string>("sortBy", "balance_asc");
   const [followupFilter, setFollowupFilter] = useUrlState<string>("followup", "all");
-  const [gympassFilter, setGympassFilter] = useUrlState<string>("gympass", "all");
   const [categoryFilter, setCategoryFilter] = useUrlState<string>("cat", "all");
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [queueIds, setQueueIds] = useState<string[] | null>(null);
@@ -151,11 +149,10 @@ function InadimplentesPage() {
         due_day: number | null;
         financial_responsible: string | null;
         active: boolean;
-        is_gympass: boolean;
         category_id: string | null;
       }>(
         "clients",
-        "id, full_name, phone, email, due_day, financial_responsible, active, is_gympass, category_id",
+        "id, full_name, phone, email, due_day, financial_responsible, active, category_id",
       ),
       fetchAll<{ client_id: string; entry_type: string; amount: number; entry_date: string }>(
         "account_entries",
@@ -211,7 +208,6 @@ function InadimplentesPage() {
           balance: balanceMap.get(c.id) ?? 0,
           message_sent: fu?.message_sent ?? false,
           followup_date: fu?.followup_date ?? null,
-          is_gympass: !!c.is_gympass,
           is_debt_limit_excepted: exceptedSet.has(c.id),
           category_id: c.category_id ?? null,
         };
@@ -423,10 +419,6 @@ function InadimplentesPage() {
           if (!fd || fd < todayStr || fd > weekEndStr) return false;
         }
       }
-      if (gympassFilter !== "all") {
-        if (gympassFilter === "gympass" && !r.is_gympass) return false;
-        if (gympassFilter === "none" && r.is_gympass) return false;
-      }
       if (categoryFilter !== "all") {
         if (categoryFilter === "none" ? r.category_id : r.category_id !== categoryFilter) return false;
       }
@@ -449,7 +441,7 @@ function InadimplentesPage() {
         break;
     }
     return sorted;
-  }, [rows, search, letterFrom, letterTo, sortBy, followupFilter, gympassFilter, categoryFilter]);
+  }, [rows, search, letterFrom, letterTo, sortBy, followupFilter, categoryFilter]);
 
   const total = useMemo(() => filtered.reduce((s, r) => s + r.balance, 0), [filtered]);
 
@@ -638,16 +630,6 @@ function InadimplentesPage() {
                 <SelectItem value="none">Sem follow up</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={gympassFilter} onValueChange={setGympassFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Gympass" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os clientes</SelectItem>
-                <SelectItem value="gympass">Apenas Gympass</SelectItem>
-                <SelectItem value="none">Sem Gympass</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
           <div className="overflow-x-auto">
             <Table>
@@ -658,7 +640,6 @@ function InadimplentesPage() {
                   <TableHead>Responsável financeiro</TableHead>
                   <TableHead>Telefone</TableHead>
                   <TableHead className="text-center">Dia venc.</TableHead>
-                  <TableHead className="text-center">Gympass</TableHead>
                   <TableHead className="text-right">Saldo</TableHead>
                   <TableHead className="text-center">
                     <div className="flex flex-col items-center gap-1">
@@ -688,13 +669,13 @@ function InadimplentesPage() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                       Carregando...
                     </TableCell>
                   </TableRow>
                 ) : filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                       Nenhum cliente inadimplente
                     </TableCell>
                   </TableRow>
@@ -754,15 +735,6 @@ function InadimplentesPage() {
                       <TableCell className="text-muted-foreground">{r.phone || "—"}</TableCell>
                       <TableCell className="text-center text-muted-foreground">
                         {r.due_day ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {r.is_gympass ? (
-                          <span className="inline-block rounded bg-purple-600 text-white text-[10px] font-semibold px-1.5 py-0.5">
-                            Gympass
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
-                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1.5">
