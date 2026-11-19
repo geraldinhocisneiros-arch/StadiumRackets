@@ -148,53 +148,6 @@ export function escolinhaLabel(categoryName: string | null | undefined): string 
   return "Escolinha";
 }
 
-/**
- * Soma o valor de TODOS os lançamentos do cliente no mesmo dia e no mesmo horário de início.
- * Retorna { total, count } — count = quantos lançamentos foram considerados.
- */
-async function getCombinedAmountForSlot(
-  clientId: string,
-  paidAt: string,
-  startTime: string,
-): Promise<{ total: number; count: number }> {
-  const day = new Date(paidAt);
-  if (Number.isNaN(day.getTime())) return { total: 0, count: 0 };
-  const startOfDay = new Date(
-    day.getFullYear(),
-    day.getMonth(),
-    day.getDate(),
-    0,
-    0,
-    0,
-    0,
-  ).toISOString();
-  const endOfDay = new Date(
-    day.getFullYear(),
-    day.getMonth(),
-    day.getDate() + 1,
-    0,
-    0,
-    0,
-    0,
-  ).toISOString();
-  const normalizedStart = startTime.length === 5 ? `${startTime}:00` : startTime;
-
-  const { data } = await supabase
-    .from("payments")
-    .select("amount, start_time")
-    .eq("client_id", clientId)
-    .gte("paid_at", startOfDay)
-    .lt("paid_at", endOfDay);
-
-  const rows = (data ?? []).filter((r) => {
-    if (!r.start_time) return false;
-    const s = r.start_time.length === 5 ? `${r.start_time}:00` : r.start_time;
-    return s === normalizedStart;
-  });
-  const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
-  return { total, count: rows.length };
-}
-
 interface FamilyMember {
   id: string;
   firstName: string;
@@ -321,16 +274,11 @@ async function buildNotificationMessage(params: NotifyParams): Promise<
   const phone = normalizePhoneForWhatsApp(recipientPhone);
   if (!phone) return { error: "Cliente sem telefone cadastrado." };
 
-  // Se temos paidAt + startTime, combina lançamentos do mesmo slot.
-  let displayAmount = amount;
-  let combinedCount = 1;
-  if (paidAt && startTime) {
-    const { total, count } = await getCombinedAmountForSlot(clientId, paidAt, startTime);
-    if (count > 1 && total > 0) {
-      displayAmount = total;
-      combinedCount = count;
-    }
-  }
+  // A mensagem fala só do lançamento que acabou de ser feito. Antes somava
+  // tudo do cliente no mesmo dia/horário (débito + crédito, outra quadra,
+  // luz...) e o cliente recebia um valor misturado. O saldo abaixo já
+  // mostra a situação completa da conta.
+  const displayAmount = amount;
 
   // Mensalidade de escolinha: lançamento na categoria Escolinha, ou cliente
   // de escolinha com lançamento "Mensalista" (ou sem categoria) que não é
@@ -420,9 +368,7 @@ async function buildNotificationMessage(params: NotifyParams): Promise<
       : received === false && accountDirection !== "credito"
         ? `Registramos a ${mensalidade} no valor de *${fmtBRL(displayAmount)}*, ainda *em aberto*.`
         : `Recebemos o pagamento de *${fmtBRL(displayAmount)}* referente à ${mensalidade}.`
-    : combinedCount > 1
-      ? `Realizamos ${combinedCount} ${tipo}s totalizando *${fmtBRL(displayAmount)}* ${contaRef} referentes à utilização da quadra.`
-      : `Realizamos o ${tipo} de *${fmtBRL(displayAmount)}* ${contaRef} referente à utilização da quadra.`;
+    : `Realizamos o ${tipo} de *${fmtBRL(displayAmount)}* ${contaRef} referente à utilização da quadra.`;
 
   const intro = dependentFirstName
     ? `Olá ${recipientFirstName}! Stadium Rackets.\n\n*Esta mensagem é referente ao seu dependente ${dependentFirstName}* (não à sua conta pessoal).`
