@@ -30,6 +30,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { toast } from "sonner";
+import { CreditConfirmDialog, type CreditConfirmRequest } from "@/components/CreditConfirmDialog";
 import { isStockCategory, isAvulsoCategoryName } from "@/lib/category";
 import { Loader2, Check, ChevronsUpDown, X, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -111,6 +112,7 @@ export interface EditPaymentDialogProps {
 export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: EditPaymentDialogProps) {
   const { user, isDiretoria, isAdmin } = useAuth();
   const canEditCommissionUser = isDiretoria || isAdmin;
+  const [creditAsk, setCreditAsk] = useState<CreditConfirmRequest | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -772,14 +774,29 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
                       onCheckedChange={(v) => {
                         if (isEstorno) return;
                         const next = v === true ? "credito" : "";
-                        if (next === "credito" && catNorm === "mensalista") {
-                          update({ accountDirection: next, received: true });
-                        } else {
-                          update({ accountDirection: next });
+                        const apply = () => {
+                          if (next === "credito" && catNorm === "mensalista") {
+                            update({ accountDirection: next, received: true });
+                          } else {
+                            update({ accountDirection: next });
+                          }
+                        };
+                        // Marcou crédito: pergunta antes (jogou e pagou na hora não é
+                        // conta corrente — é só Pagamento recebido).
+                        if (next === "credito" && catNorm !== "credito gympass") {
+                          setCreditAsk({
+                            clientIds: form.clientId ? [form.clientId] : [],
+                            amount: Number(String(form.amount).replace(",", ".")) || 0,
+                            onAddToAccount: apply,
+                            onPaidNow: () => update({ accountDirection: "", received: true }),
+                          });
+                          return;
                         }
+                        apply();
                       }}
                     />
                     <Label className="cursor-pointer font-normal text-center leading-tight">Creditar na<br />C/C</Label>
+                    <CreditConfirmDialog request={creditAsk} onClose={() => setCreditAsk(null)} />
                   </div>
                   <div
                     className={`flex items-center gap-2 rounded-md border p-3 ${!eligible || isAutoCC || isEstorno ? "opacity-50" : ""}`}

@@ -49,6 +49,7 @@ import {
   fetchOpenDebtByClient,
   insertOpenDebtSettlement,
 } from "@/lib/open-debt";
+import { CreditConfirmDialog, type CreditConfirmRequest } from "@/components/CreditConfirmDialog";
 import {
   PAYMENT_METHOD_LABELS as METHOD_LABELS,
   PAYMENT_METHOD_OPTIONS as METHOD_OPTIONS,
@@ -1470,6 +1471,7 @@ function CaixaPage() {
   };
 
   // ------- Form fields component (shared between create + edit) -------
+  const [creditAsk, setCreditAsk] = useState<CreditConfirmRequest | null>(null);
   const renderFormFields = (f: FormState, setF: (u: FormState) => void, isCreate: boolean) => {
     const update = (patch: Partial<FormState>) => setF({ ...f, ...patch });
     const fCat = categories.find((x) => x.id === f.categoryId);
@@ -2141,14 +2143,29 @@ function CaixaPage() {
                       const next = v === true ? "credito" : "";
                       const cat = categories.find((c) => c.id === f.categoryId);
                       const norm = normalizeCategoryName(cat?.name);
-                      if (next === "credito" && norm === "mensalista") {
-                        update({ accountDirection: next, received: true, court: "", startTime: "", endTime: "" });
-                      } else {
-                        update({ accountDirection: next });
+                      const apply = () => {
+                        if (next === "credito" && norm === "mensalista") {
+                          update({ accountDirection: next, received: true, court: "", startTime: "", endTime: "" });
+                        } else {
+                          update({ accountDirection: next });
+                        }
+                      };
+                      // Marcou crédito: pergunta antes (jogou e pagou na hora
+                      // não é conta corrente — é só Pagamento recebido).
+                      if (next === "credito" && fCatNorm !== "credito gympass") {
+                        setCreditAsk({
+                          clientIds: isCreate ? f.clientIds : [f.clientId],
+                          amount: Number(String(f.amount).replace(",", ".")) || 0,
+                          onAddToAccount: apply,
+                          onPaidNow: () => update({ accountDirection: "", received: true }),
+                        });
+                        return;
                       }
+                      apply();
                     }}
                   />
                   <Label className="cursor-pointer font-normal text-center leading-tight">Creditar na<br />C/C</Label>
+                  <CreditConfirmDialog request={creditAsk} onClose={() => setCreditAsk(null)} />
                 </div>
                 <div
                   className={`flex items-center gap-2 rounded-md border p-3 ${!eligible || fCatNorm === "credito gympass" || isEstornoAccount ? "opacity-50" : ""}`}
