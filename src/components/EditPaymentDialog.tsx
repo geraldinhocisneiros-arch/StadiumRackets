@@ -37,7 +37,10 @@ import { todayISO, dateISOInRecife, recifeDateToISO, fmtBRL, accentInsensitiveFi
 import { ClientDialog } from "@/routes/clientes";
 import { calcPrice, weekdayFromYmd, fmtHours, type PriceBand } from "@/lib/pricing";
 import { fetchAll } from "@/lib/fetchAll";
-import { PAYMENT_METHOD_OPTIONS as METHOD_OPTIONS } from "@/lib/payment-methods";
+import {
+  PAYMENT_METHOD_OPTIONS as METHOD_OPTIONS,
+  MENSALISTA_CREDITO_COM_QUADRA_MSG,
+} from "@/lib/payment-methods";
 
 interface ClientRow {
   id: string;
@@ -237,10 +240,7 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
     // Locação paga na hora tem quadra/horário e deve ser só "Pagamento
     // recebido" — creditar geraria saldo que não existe.
     if (catSelNorm === "mensalista" && form.accountDirection === "credito" && (form.court || form.startTime)) {
-      toast.error(
-        "Locação paga na hora não vai para a conta corrente. Desmarque \"Creditar na C/C\" e deixe só \"Pagamento recebido\". Crédito é só para saldo adiantado, sem quadra/horário.",
-        { duration: 10000 },
-      );
+      toast.error(MENSALISTA_CREDITO_COM_QUADRA_MSG, { duration: 10000 });
       return;
     }
     if ((catSelNorm === "ranking masculino" || catSelNorm === "ranking feminino") && (!form.court || !form.startTime)) {

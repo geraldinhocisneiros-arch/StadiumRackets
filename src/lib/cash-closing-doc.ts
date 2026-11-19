@@ -1,21 +1,14 @@
 import { fmtBRL } from "@/lib/format";
-import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/payment-methods";
+import {
+  PAYMENT_METHOD_LABELS as METHOD_LABELS,
+  CLOSING_METHODS,
+  closingMethodOf,
+} from "@/lib/payment-methods";
 import { courtShort } from "@/lib/court-map";
 
 
-const METHODS_ORDER = [
-  "dinheiro",
-  "pix",
-  "debito",
-  "credito",
-  "transferencia",
-  "letzplay_pix",
-  "letzplay_cartao",
-  "rede_itau",
-  "mercadopago",
-  "conta_corrente",
-  "outro",
-];
+// Mesmas formas e mesma ordem do Caixa.
+const METHODS_ORDER = CLOSING_METHODS;
 
 export interface ClosingPaymentItem {
   client?: string | null;
@@ -149,7 +142,9 @@ export function buildClosingDocumentHtml(rec: ClosingRecord, opts?: { autoPrint?
     : "";
 
   // Itemized payments grouped by method
-  const items = (rec.received_items ?? []).filter((p) => Number(p.amount) > 0);
+  const items = (rec.received_items ?? [])
+    .filter((p) => Number(p.amount) > 0)
+    .map((p) => ({ ...p, method: closingMethodOf(p.method) ?? p.method }));
   let itemsHtml = "";
   if (items.length) {
     const sorted = [...items].sort((a, b) => {
