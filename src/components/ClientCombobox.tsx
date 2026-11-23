@@ -27,6 +27,8 @@ import { Check, ChevronsUpDown, Loader2, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { accentInsensitiveFilter } from "@/lib/format";
+import { useConfirm } from "@/hooks/useConfirm";
+import { fetchDuplicateCandidates, findSimilarClients } from "@/lib/client-duplicates";
 
 export interface ClientOption {
   id: string;
@@ -60,6 +62,7 @@ export function ClientCombobox({
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [saving, setSaving] = useState(false);
+  const confirm = useConfirm();
 
   const selected = clients.find((c) => c.id === value);
 
@@ -78,6 +81,22 @@ export function ClientCombobox({
       return;
     }
     setSaving(true);
+    // Cadastro rápido (tela de reserva) também checa nome/telefone parecido —
+    // foi por aqui que entravam duplicados tipo "cibele" × "Cibelle".
+    try {
+      const dupes = findSimilarClients(await fetchDuplicateCandidates(), trimmed, newPhone);
+      if (dupes.length > 0) {
+        const ok = await confirm(
+          `Já existe cadastro parecido:\n\n${dupes.join("\n")}\n\nSe for a mesma pessoa, cancele e selecione o cadastro existente na busca. Cadastrar mesmo assim?`,
+        );
+        if (!ok) {
+          setSaving(false);
+          return;
+        }
+      }
+    } catch {
+      // falha ao checar não deve impedir o cadastro
+    }
     const { data, error } = await supabase
       .from("clients")
       .insert({

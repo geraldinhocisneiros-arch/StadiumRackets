@@ -30,6 +30,7 @@ import { MonthEndProjectionButton } from "@/components/MonthEndProjectionButton"
 import { useServerFn } from "@tanstack/react-start";
 import { deleteClientAccount } from "@/lib/users.functions";
 import { CategoryTabs } from "@/components/CategoryTabs";
+import { fetchDuplicateCandidates, findSimilarClients } from "@/lib/client-duplicates";
 
 export const Route = createFileRoute("/clientes")({
   component: () => (
@@ -645,33 +646,22 @@ export function ClientDialog({
 
     const trimmedName = name.trim();
     const trimmedPhone = phone.trim();
-    const phoneDigits = trimmedPhone.replace(/\D/g, "");
-    const normName = normalizeText(trimmedName);
+    // Na edição, só checa duplicado se nome ou telefone mudaram — senão um
+    // par parecido já conhecido avisaria a cada salvamento.
+    const identityChanged =
+      !editing ||
+      trimmedName !== (editing.full_name ?? "").trim() ||
+      trimmedPhone !== (editing.phone ?? "").trim();
 
     // Duplicate check (skip when forced confirmation)
-    if (!force) {
-      const existing = await fetchAll<{ id: string; full_name: string; phone: string | null }>(
-        "clients",
-        "id, full_name, phone",
-      );
-
-      const dupes: string[] = [];
-      existing.forEach((c) => {
-        if (editing && c.id === editing.id) return;
-        if (normName && normalizeText(c.full_name) === normName) {
-          dupes.push(`Nome igual: "${c.full_name}"`);
-          return;
-        }
-        const otherDigits = (c.phone ?? "").replace(/\D/g, "");
-        if (phoneDigits && otherDigits && phoneDigits === otherDigits) {
-          dupes.push(`Telefone igual ao de "${c.full_name}" (${c.phone})`);
-        }
-      });
+    if (!force && identityChanged) {
+      const existing = await fetchDuplicateCandidates();
+      const dupes = findSimilarClients(existing, trimmedName, trimmedPhone, editing?.id);
 
       if (dupes.length > 0) {
         setSubmitting(false);
         const ok = await confirm(
-          `Já existe cadastro similar:\n\n${dupes.join("\n")}\n\nDeseja cadastrar mesmo assim?`
+          `Já existe cadastro parecido:\n\n${dupes.join("\n")}\n\nConfira se não é a mesma pessoa antes de continuar — cadastro duplicado separa reservas e débitos do cliente. Deseja salvar mesmo assim?`
         );
         if (!ok) return;
         // Re-run forced

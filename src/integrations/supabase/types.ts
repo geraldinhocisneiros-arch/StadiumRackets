@@ -871,6 +871,7 @@ export type Database = {
           birth_month: number | null
           category_id: string | null
           created_at: string
+          court_fee_exempt: boolean
           custom_amount: number | null
           default_discount_percent: number
           due_day: number | null
@@ -898,6 +899,7 @@ export type Database = {
           birth_month?: number | null
           category_id?: string | null
           created_at?: string
+          court_fee_exempt?: boolean
           custom_amount?: number | null
           default_discount_percent?: number
           due_day?: number | null
@@ -925,6 +927,7 @@ export type Database = {
           birth_month?: number | null
           category_id?: string | null
           created_at?: string
+          court_fee_exempt?: boolean
           custom_amount?: number | null
           default_discount_percent?: number
           due_day?: number | null

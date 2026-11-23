@@ -351,6 +351,11 @@ export function CourtBookingDialog({
   // id do cliente -> nome do professor. Novas reservas nesses cadastros são
   // recusadas; as que já existem continuam, só com aviso.
   const [linkedTeacherByClient, setLinkedTeacherByClient] = useState<Record<string, string>>({});
+  // Clientes que entram na divisão da quadra avulsa mas não pagam a parte
+  // deles (clients.court_fee_exempt — hoje só a dona da academia). A parte
+  // conta no rateio (os outros pagam total/N), só não vira lançamento.
+  const [feeExemptIds, setFeeExemptIds] = useState<Set<string>>(new Set());
+  const isFeeExempt = (id: string | null | undefined) => !!id && feeExemptIds.has(id);
   const [addingSibling, setAddingSibling] = useState(false);
   // Participantes adicionais (quadra dividida entre clientes)
   const [participantIds, setParticipantIds] = useState<string[]>([]);
@@ -369,6 +374,7 @@ export function CourtBookingDialog({
         linked_teacher_id: string | null;
         default_discount_percent: number | null;
         active: boolean;
+        court_fee_exempt: boolean | null;
         client_categories: { name: string } | { name: string }[] | null;
         linked_teacher: { name: string } | { name: string }[] | null;
       };
@@ -387,7 +393,7 @@ export function CourtBookingDialog({
       const [clientRowsAll, t] = await Promise.all([
         fetchAll<ClientRow>(
           "clients",
-          "id, full_name, category_id, teacher_id, linked_teacher_id, default_discount_percent, active, client_categories(name), linked_teacher:teachers!clients_linked_teacher_id_fkey(name)",
+          "id, full_name, category_id, teacher_id, linked_teacher_id, default_discount_percent, active, court_fee_exempt, client_categories(name), linked_teacher:teachers!clients_linked_teacher_id_fkey(name)",
         ),
         supabase.from("teachers").select("id, name").eq("active", true).order("name"),
       ]);
@@ -416,6 +422,7 @@ export function CourtBookingDialog({
         linked[r.id] = lt?.name ?? "professor";
       }
       setLinkedTeacherByClient(linked);
+      setFeeExemptIds(new Set(clientRowsAll.filter((r) => r.court_fee_exempt).map((r) => r.id)));
       setTeachers((t.data ?? []) as TeacherOption[]);
     })();
   }, [open]);
@@ -1152,9 +1159,6 @@ export function CourtBookingDialog({
     }
     const shouldCreatePayment =
       wantsPayment && !!clientId && (amountNum > 0 || payReceived || payDirection !== "");
-    // Quem já recebe a mensagem do lançamento (que confirma a reserva junto)
-    // não recebe a de "reserva criada" — uma mensagem por cliente.
-    const notifiedWithPayment = new Set<string>();
     if (shouldCreatePayment) {
       if (amountNum < 0) {
         setSubmitting(false);
@@ -1181,7 +1185,9 @@ export function CourtBookingDialog({
       const baseNotes = `Auto (mapa) · ${courtShort(court)} · ${startTime.slice(0, 5)}–${endTime.slice(0, 5)}`;
       const charged = splitTargets
         .map((cid, i) => ({ cid, amount: splitAmounts[i]!, i }))
-        .filter((t) => splitTargets.length === 1 || hasPaySetting(payFor(t.cid)));
+        .filter((t) => splitTargets.length === 1 || hasPaySetting(payFor(t.cid)))
+        // Isenta (dona): entra na conta da divisão, mas a parte dela não é lançada.
+        .filter((t) => !isFeeExempt(t.cid));
       const { error: payErr } = charged.length === 0 ? { error: null } : await supabase.from("payments").insert(
         charged.map(({ cid, amount }) => ({
           client_id: cid,
@@ -1224,8 +1230,15 @@ export function CourtBookingDialog({
         if (debtErr) toast.error(`Quadra lançada, mas falhou o recebimento do débito: ${debtErr}`);
         else toast.success(`Débito em aberto recebido: ${fmtBRL(debtToReceive)}`);
       }
+      const exemptSkipped = splitTargets.filter((cid) => isFeeExempt(cid));
+      if (exemptSkipped.length) {
+        toast.message(
+          `Parte de ${exemptSkipped
+            .map((cid) => clients.find((c) => c.id === cid)?.full_name ?? "cliente")
+            .join(", ")} não foi lançada (não paga a quadra).`,
+        );
+      }
       charged.forEach(({ cid, amount }) => {
-        notifiedWithPayment.add(cid);
         void offerWhatsAppPaymentNotification({
           clientId: cid,
           amount,
@@ -1233,7 +1246,6 @@ export function CourtBookingDialog({
             (splitTargets.length > 1 ? payFor(cid).direction : payDirection) || null,
           paidAt: paidAtIso,
           startTime,
-          booking: { court, bookingDate, startTime, endTime },
         });
       });
     }
@@ -1288,14 +1300,12 @@ export function CourtBookingDialog({
       if (payErr2) {
         toast.error(`Locação criada, mas falhou o lançamento do 2º jogador: ${payErr2.message}`);
       } else {
-        notifiedWithPayment.add(secondClientId);
         void offerWhatsAppPaymentNotification({
           clientId: secondClientId,
           amount: amountNum2,
           accountDirection: payDirection2 || null,
           paidAt: paidAtIso2,
           startTime,
-          booking: { court, bookingDate, startTime, endTime },
         });
       }
     }
@@ -1315,7 +1325,9 @@ export function CourtBookingDialog({
     onSaved();
     onOpenChange(false);
 
-    if (clientId && !notifiedWithPayment.has(clientId)) {
+    // Confirmação da reserva é SEMPRE uma mensagem separada da do lançamento
+    // (débito/saldo) — juntas no mesmo texto confundem o cliente.
+    if (clientId) {
       void offerBookingReservedNotification({
         clientId,
         court,
@@ -1325,7 +1337,6 @@ export function CourtBookingDialog({
       });
     }
     for (const cid of uniqueParticipants) {
-      if (notifiedWithPayment.has(cid)) continue;
       void offerBookingReservedNotification({
         clientId: cid,
         court,
@@ -2421,10 +2432,16 @@ export function CourtBookingDialog({
     const viewSplitAmounts = splitEvenly(amountNum, viewSplitTargets.length);
     const viewCharged = viewSplitTargets
       .map((cid, i) => ({ cid, i }))
-      .filter((t) => viewSplitTargets.length === 1 || hasPaySetting(payFor(t.cid)));
+      .filter((t) => viewSplitTargets.length === 1 || hasPaySetting(payFor(t.cid)))
+      // Isenta (dona): entra na conta da divisão, mas a parte dela não é lançada.
+      .filter((t) => !isFeeExempt(t.cid));
     if (!viewPendingPaymentId && viewCharged.length === 0) {
       setSubmitting(false);
-      toast.error("Nenhum jogador com forma de pagamento, débito na conta ou recebido marcado.");
+      toast.error(
+        viewSplitTargets.some((cid) => isFeeExempt(cid))
+          ? "Quem não paga a quadra não é lançado — escolha outro jogador ou divida a quadra."
+          : "Nenhum jogador com forma de pagamento, débito na conta ou recebido marcado.",
+      );
       return;
     }
     const { error } = viewPendingPaymentId
@@ -2476,9 +2493,19 @@ export function CourtBookingDialog({
         startTime: existing.start_time,
       });
     });
+    const viewExemptNames = viewSplitTargets
+      .filter((cid) => isFeeExempt(cid))
+      .map(
+        (cid) =>
+          existingParticipants.find((p) => p.client_id === cid)?.full_name ??
+          (cid === existing.client_id ? existing.clients?.full_name : null) ??
+          "cliente",
+      );
     toast.success(
       viewSplitTargets.length > 1
-        ? `Valor dividido em ${viewSplitTargets.length}: ${viewSplitAmounts.map(fmtBRL).join(" · ")}`
+        ? `Valor dividido em ${viewSplitTargets.length}: ${viewSplitAmounts.map(fmtBRL).join(" · ")}${
+            viewExemptNames.length ? ` — parte de ${viewExemptNames.join(", ")} não lançada` : ""
+          }`
         : "Lançamento criado",
     );
     setViewWantsPayment(false);
@@ -3649,6 +3676,7 @@ export function CourtBookingDialog({
                             return viewPlayers.map((p, i) => ({
                               id: p.id,
                               name: p.name,
+                              exempt: isFeeExempt(p.id),
                               amount:
                                 viewIsDupla && duplaPayMode === "individual" ? (
                                   <Input
@@ -4376,6 +4404,7 @@ export function CourtBookingDialog({
                             return ids.map((id, i) => ({
                               id,
                               name: clients.find((c) => c.id === id)?.full_name ?? "Cliente",
+                              exempt: isFeeExempt(id),
                               amount: <span className="font-mono text-sm">{fmtBRL(parts[i] ?? 0)}</span>,
                             }));
                           })()}
@@ -4531,7 +4560,7 @@ function PlayerPaymentRows({
   resolve,
   onChange,
 }: {
-  rows: { id: string; name: string; amount: React.ReactNode }[];
+  rows: { id: string; name: string; amount: React.ReactNode; exempt?: boolean }[];
   resolve: (id: string) => PlayerPay;
   onChange: (id: string, patch: Partial<PlayerPay>) => void;
 }) {
@@ -4544,6 +4573,20 @@ function PlayerPaymentRows({
       </p>
       {rows.map((r) => {
         const v = resolve(r.id);
+        if (r.exempt) {
+          return (
+            <div
+              key={r.id}
+              className="flex items-center justify-between gap-2 border-t pt-2 first:border-t-0 first:pt-0"
+            >
+              <span className="truncate text-sm font-medium">{r.name}</span>
+              <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="line-through">{r.amount}</span>
+                não paga · não é lançada
+              </span>
+            </div>
+          );
+        }
         return (
           <div key={r.id} className="space-y-1.5 border-t pt-2 first:border-t-0 first:pt-0">
             <div className="flex items-center justify-between gap-2">

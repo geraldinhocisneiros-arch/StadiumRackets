@@ -106,26 +106,6 @@ interface NotifyParams {
   received?: boolean | null;
   /** Mês da mensalidade da escolinha ("2026-11-01"). */
   referenceMonth?: string | null;
-  /**
-   * Reserva criada junto com o lançamento: a mensagem já confirma a reserva
-   * (data, horário, quadra), pra não mandar duas mensagens ao mesmo cliente.
-   */
-  booking?: { court: number; bookingDate: string; startTime: string; endTime: string } | null;
-}
-
-/** Linhas "- *Quarta-feira, 18/11/2026*", "- *10:00 às 11:00*", "- *Quadra*". */
-function bookingLines(bookingDate: string, startTime: string, endTime: string, court: number): string {
-  const [y, m, d] = bookingDate.split("-").map(Number);
-  const dateBR = `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
-  const weekday = new Date(y!, (m ?? 1) - 1, d ?? 1).toLocaleDateString("pt-BR", {
-    weekday: "long",
-  });
-  const wd = weekday.charAt(0).toUpperCase() + weekday.slice(1);
-  return (
-    `- *${wd}, ${dateBR}*\n` +
-    `- *${startTime.slice(0, 5)} às ${endTime.slice(0, 5)}*\n` +
-    `- *${courtLongLabel(court)}*`
-  );
 }
 
 function normCat(name: string | null | undefined): string {
@@ -236,7 +216,6 @@ async function buildNotificationMessage(params: NotifyParams): Promise<
     categoryName,
     received,
     referenceMonth,
-    booking,
   } = params;
 
   const { data: client } = await supabase
@@ -376,14 +355,13 @@ async function buildNotificationMessage(params: NotifyParams): Promise<
 
   const debtReminder = await buildOpenDebtReminder(clientId, dependentFirstName);
 
-  const reservaBlock = booking
-    ? `Confirmamos sua reserva:\n\n${bookingLines(booking.bookingDate, booking.startTime, booking.endTime, booking.court)}\n\n`
-    : "";
+  // A mensagem do lançamento NÃO confirma reserva: a confirmação vai em
+  // mensagem separada (offerBookingReservedNotification). As duas juntas
+  // confundiam o cliente.
   const message =
     `${intro}\n\n` +
-    reservaBlock +
     `${linhaLancamento}\n` +
-    (quandoLinha && !booking ? `${quandoLinha}\n` : "") +
+    (quandoLinha ? `${quandoLinha}\n` : "") +
     (saldoBlock ? `\n${saldoBlock}\n\n` : "\n") +
     (debtReminder ? `${debtReminder}\n\n` : "") +
     `Qualquer dúvida estamos à disposição. Obrigado!`;
@@ -409,9 +387,7 @@ export async function offerWhatsAppPaymentNotification(
 
   toast.success(`Avisar ${firstName} no WhatsApp?`, {
     id: `wa-${params.clientId}-${Date.now()}`,
-    description: params.booking
-      ? "Reserva criada. Envie a confirmação com o saldo atualizado."
-      : "Clique para enviar a mensagem com o saldo atualizado.",
+    description: "Clique para enviar a mensagem com o saldo atualizado.",
     duration: 10000,
     action: {
       label: "Enviar WhatsApp",

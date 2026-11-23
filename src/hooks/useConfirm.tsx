@@ -45,7 +45,9 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{state?.title ?? "Tem certeza?"}</AlertDialogTitle>
-            <AlertDialogDescription>{state?.description}</AlertDialogDescription>
+            <AlertDialogDescription className="whitespace-pre-line">
+              {state?.description}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => settle(false)}>
