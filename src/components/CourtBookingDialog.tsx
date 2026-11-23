@@ -1159,9 +1159,6 @@ export function CourtBookingDialog({
     }
     const shouldCreatePayment =
       wantsPayment && !!clientId && (amountNum > 0 || payReceived || payDirection !== "");
-    // Quem já recebe a mensagem do lançamento (que confirma a reserva junto)
-    // não recebe a de "reserva criada" — uma mensagem por cliente.
-    const notifiedWithPayment = new Set<string>();
     if (shouldCreatePayment) {
       if (amountNum < 0) {
         setSubmitting(false);
@@ -1242,7 +1239,6 @@ export function CourtBookingDialog({
         );
       }
       charged.forEach(({ cid, amount }) => {
-        notifiedWithPayment.add(cid);
         void offerWhatsAppPaymentNotification({
           clientId: cid,
           amount,
@@ -1250,7 +1246,6 @@ export function CourtBookingDialog({
             (splitTargets.length > 1 ? payFor(cid).direction : payDirection) || null,
           paidAt: paidAtIso,
           startTime,
-          booking: { court, bookingDate, startTime, endTime },
         });
       });
     }
@@ -1305,14 +1300,12 @@ export function CourtBookingDialog({
       if (payErr2) {
         toast.error(`Locação criada, mas falhou o lançamento do 2º jogador: ${payErr2.message}`);
       } else {
-        notifiedWithPayment.add(secondClientId);
         void offerWhatsAppPaymentNotification({
           clientId: secondClientId,
           amount: amountNum2,
           accountDirection: payDirection2 || null,
           paidAt: paidAtIso2,
           startTime,
-          booking: { court, bookingDate, startTime, endTime },
         });
       }
     }
@@ -1332,7 +1325,9 @@ export function CourtBookingDialog({
     onSaved();
     onOpenChange(false);
 
-    if (clientId && !notifiedWithPayment.has(clientId)) {
+    // Confirmação da reserva é SEMPRE uma mensagem separada da do lançamento
+    // (débito/saldo) — juntas no mesmo texto confundem o cliente.
+    if (clientId) {
       void offerBookingReservedNotification({
         clientId,
         court,
@@ -1342,7 +1337,6 @@ export function CourtBookingDialog({
       });
     }
     for (const cid of uniqueParticipants) {
-      if (notifiedWithPayment.has(cid)) continue;
       void offerBookingReservedNotification({
         clientId: cid,
         court,
