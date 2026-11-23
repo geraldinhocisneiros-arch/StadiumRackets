@@ -1325,25 +1325,21 @@ export function CourtBookingDialog({
     onSaved();
     onOpenChange(false);
 
-    // Confirmação da reserva é SEMPRE uma mensagem separada da do lançamento
-    // (débito/saldo) — juntas no mesmo texto confundem o cliente.
-    if (clientId) {
-      void offerBookingReservedNotification({
-        clientId,
-        court,
-        bookingDate,
-        startTime,
-        endTime,
-      });
-    }
-    for (const cid of uniqueParticipants) {
-      void offerBookingReservedNotification({
-        clientId: cid,
-        court,
-        bookingDate,
-        startTime,
-        endTime,
-      });
+    // Uma mensagem só por locação, nunca as duas juntas:
+    // - lançou no caixa → só a mensagem do lançamento com o saldo (oferecida
+    //   acima), sem a confirmação da reserva;
+    // - não lançou → só a confirmação da reserva.
+    if (!shouldCreatePayment && !shouldCreatePayment2) {
+      for (const cid of [clientId, ...uniqueParticipants]) {
+        if (!cid) continue;
+        void offerBookingReservedNotification({
+          clientId: cid,
+          court,
+          bookingDate,
+          startTime,
+          endTime,
+        });
+      }
     }
   };
 
