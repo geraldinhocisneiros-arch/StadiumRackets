@@ -213,7 +213,7 @@ export function VacationCancelDialog({
       toast.success(`Avisar ${recipientFirstName} no WhatsApp?`, {
         id: `wa-vac-${clientId}-${Date.now()}`,
         description: `${preview.length} data(s) canceladas — mensagem pronta.`,
-        duration: 15000,
+        duration: Infinity, // fica até clicar em Enviar ou fechar no X
         action: {
           label: "Enviar WhatsApp",
           onClick: () => {

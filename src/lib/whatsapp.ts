@@ -388,7 +388,7 @@ export async function offerWhatsAppPaymentNotification(
   toast.success(`Avisar ${firstName} no WhatsApp?`, {
     id: `wa-${params.clientId}-${Date.now()}`,
     description: "Clique para enviar a mensagem com o saldo atualizado.",
-    duration: 10000,
+    duration: Infinity, // fica até clicar em Enviar ou fechar no X
     action: {
       label: "Enviar WhatsApp",
       onClick: () => {
@@ -768,7 +768,7 @@ export async function offerBookingReservedNotification(params: {
   toast.success(`Avisar ${firstName} no WhatsApp?`, {
     id: `wa-booking-${params.clientId}-${Date.now()}`,
     description: "Reserva criada. Envie a confirmação ao cliente.",
-    duration: 10000,
+    duration: Infinity, // fica até clicar em Enviar ou fechar no X
     action: {
       label: "Enviar WhatsApp",
       onClick: () => {
@@ -859,7 +859,7 @@ export async function offerBookingCourtChangeNotification(params: {
   toast.success(`Avisar ${firstName} sobre mudança de quadra?`, {
     id: `wa-move-${params.clientId}-${Date.now()}`,
     description: `${courtShort(params.fromCourt)} → ${courtShort(params.toCourt)} · ${s}–${e}`,
-    duration: 12000,
+    duration: Infinity, // fica até clicar em Enviar ou fechar no X
     action: {
       label: "Enviar WhatsApp",
       onClick: () => {
@@ -951,7 +951,7 @@ export async function offerBookingCancelledNotification(params: {
   toast.success(`Avisar ${firstName} sobre cancelamento?`, {
     id: `wa-cancel-${params.clientId}-${Date.now()}`,
     description: `${quadra} · ${s}–${e}`,
-    duration: 12000,
+    duration: Infinity, // fica até clicar em Enviar ou fechar no X
     action: {
       label: "Enviar WhatsApp",
       onClick: () => {
