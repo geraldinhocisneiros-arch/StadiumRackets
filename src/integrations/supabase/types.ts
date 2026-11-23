@@ -3668,6 +3668,10 @@ export type Database = {
           total: number
         }[]
       }
+      pickleball_class_end: {
+        Args: { _class_id: string }
+        Returns: string
+      }
       pickleball_class_generate_fees: {
         Args: { _month: string }
         Returns: {
