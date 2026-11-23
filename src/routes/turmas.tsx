@@ -35,7 +35,7 @@ import {
 import { ClientCombobox, type ClientOption } from "@/components/ClientCombobox";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
-import { Plus, Pencil, Loader2, UserMinus, Receipt, Users } from "lucide-react";
+import { Plus, Pencil, Loader2, UserMinus, Receipt, Users, CircleStop } from "lucide-react";
 import { fetchAll } from "@/lib/fetchAll";
 import { fmtBRL, fmtDate, todayISO } from "@/lib/format";
 import { PICKLEBALL_COURTS, courtShort, weekdayShort } from "@/lib/court-map";
@@ -301,6 +301,26 @@ function ClassCard({
     onChanged();
   };
 
+  const endClass = async () => {
+    if (
+      !(await confirm(
+        `Encerrar a turma ${cls.name} agora?\n\n` +
+          `• ${active.length} aluno(s) saem da turma e o horário fica livre para locação a partir de hoje.\n` +
+          `• A mensalidade desta turma deixa de ser gerada a partir do próximo mês, ` +
+          `inclusive para quem é da categoria Escolinha Pickleball.\n` +
+          `• Quem for continuar, coloque em outra turma — lá a mensalidade volta a ser gerada.\n\n` +
+          `O histórico fica guardado.`,
+      ))
+    )
+      return;
+    setBusy(true);
+    const { error } = await supabase.rpc("pickleball_class_end", { _class_id: cls.id });
+    setBusy(false);
+    if (error) return toast.error(error.message);
+    toast.success("Turma encerrada");
+    onChanged();
+  };
+
   const removeMember = async (m: PickleballClassMember) => {
     if (
       !(await confirm(
@@ -344,9 +364,23 @@ function ClassCard({
               )}
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={onEdit} aria-label="Editar turma">
-            <Pencil className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            {!ended && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={endClass}
+                disabled={busy}
+                className="text-destructive"
+              >
+                <CircleStop className="h-4 w-4 mr-1" />
+                Encerrar turma
+              </Button>
+            )}
+            <Button variant="ghost" size="icon" onClick={onEdit} aria-label="Editar turma">
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
         {active.length === 0 && !ended && (
           <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
