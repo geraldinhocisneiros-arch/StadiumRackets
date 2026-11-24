@@ -77,9 +77,11 @@ function FechamentosPage() {
       if (ids.length) {
         const { data: profs } = await supabase
           .from("profiles")
-          .select("id, full_name")
+          .select("id, full_name, email")
           .in("id", ids);
-        nameMap = Object.fromEntries((profs ?? []).map((p) => [p.id, p.full_name ?? ""]));
+        nameMap = Object.fromEntries(
+          (profs ?? []).map((p) => [p.id, p.full_name?.trim() || p.email || "Usuário sem nome"]),
+        );
       }
       setRows(list.map((r) => ({ ...r, closed_by_name: nameMap[r.closed_by] ?? null })));
     } catch (e) {

@@ -377,7 +377,7 @@ function CaixaPage() {
           .from("price_table")
           .select("id, categories, weekday, start_time, end_time, price_per_hour, courts, starts_on, ends_on"),
         // Lista de usuários pra exibir nome de quem registrou/editou cada lançamento.
-        supabase.from("profiles").select("id, full_name").order("full_name"),
+        supabase.from("profiles").select("id, full_name, email").order("full_name"),
         // Só recepcionistas devem aparecer como opção de "Comissão para".
         // RPC porque user_roles só mostra o próprio papel pra recepcionista;
         // se ainda não existir no banco, cai na consulta antiga.
@@ -390,7 +390,9 @@ function CaixaPage() {
       ]);
       if (catsRes.error) throw catsRes.error;
       setPriceBands((pbRes.data as unknown as PriceBand[]) ?? []);
-      const allProfs = (allProfsRes.data ?? []) as Array<{ id: string; full_name: string }>;
+      const allProfs = ((allProfsRes.data ?? []) as Array<{ id: string; full_name: string | null; email?: string | null }>).map(
+        (p) => ({ id: p.id, full_name: p.full_name?.trim() || p.email || "Usuário sem nome" }),
+      );
       setAllProfiles(allProfs);
       const recepIds = new Set(
         ((recepRolesRes.data ?? []) as Array<{ user_id: string }>).map((r) => r.user_id),
@@ -458,8 +460,8 @@ function CaixaPage() {
     // Nenhuma depende da outra — só dependem de `paymentsData`, já disponível.
     const [profilesRes, receiptsRes] = await Promise.all([
       ids.size > 0
-        ? supabase.from("profiles").select("id, full_name").in("id", Array.from(ids))
-        : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
+        ? supabase.from("profiles").select("id, full_name, email").in("id", Array.from(ids))
+        : Promise.resolve({ data: [] as { id: string; full_name: string; email: string | null }[] }),
       paymentIds.length > 0
         ? supabase
             .from("payment_receipts")
@@ -469,7 +471,13 @@ function CaixaPage() {
         : Promise.resolve({ data: [] as { payment_id: string; file_path: string; created_at: string }[] }),
     ]);
     const profilesMap: Record<string, { full_name: string }> = Object.fromEntries(
-      (profilesRes.data ?? []).map((p) => [p.id, { full_name: p.full_name }]),
+      // Perfil sem nome cadastrado (ex.: conta criada só com e-mail) deixava a
+      // coluna Recepcionista em branco — cai no e-mail para sempre identificar
+      // quem lançou.
+      (profilesRes.data ?? []).map((p) => [
+        p.id,
+        { full_name: p.full_name?.trim() || p.email || "Usuário sem nome" },
+      ]),
     );
     const enriched: PaymentRow[] = paymentsData.map((p) => ({
       ...p,
