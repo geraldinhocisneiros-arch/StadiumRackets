@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { fmtBRL, fmtDate } from "@/lib/format";
+import { longMonthRef } from "@/lib/mensalidade";
 import { buildOpenDebtReminder } from "@/lib/open-debt";
 import { courtLongLabel, courtShort } from "@/lib/court-map";
 
@@ -101,53 +102,30 @@ interface NotifyParams {
   startTime?: string | null;
   /** Nome da categoria do pagamento (ex: estorno). */
   categoryName?: string | null;
+  /** Se o pagamento já foi recebido (pagamento direto, fora da conta corrente). */
+  received?: boolean | null;
+  /** Mês da mensalidade da escolinha ("2026-11-01"). */
+  referenceMonth?: string | null;
+}
+
+function normCat(name: string | null | undefined): string {
+  return (name ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
 }
 
 /**
- * Soma o valor de TODOS os lançamentos do cliente no mesmo dia e no mesmo horário de início.
- * Retorna { total, count } — count = quantos lançamentos foram considerados.
+ * "Escolinha Tenis" → "Escolinha de Tênis", "Escolinha Pickleball" →
+ * "Escolinha de Pickleball". Null se a categoria não for de escolinha.
  */
-async function getCombinedAmountForSlot(
-  clientId: string,
-  paidAt: string,
-  startTime: string,
-): Promise<{ total: number; count: number }> {
-  const day = new Date(paidAt);
-  if (Number.isNaN(day.getTime())) return { total: 0, count: 0 };
-  const startOfDay = new Date(
-    day.getFullYear(),
-    day.getMonth(),
-    day.getDate(),
-    0,
-    0,
-    0,
-    0,
-  ).toISOString();
-  const endOfDay = new Date(
-    day.getFullYear(),
-    day.getMonth(),
-    day.getDate() + 1,
-    0,
-    0,
-    0,
-    0,
-  ).toISOString();
-  const normalizedStart = startTime.length === 5 ? `${startTime}:00` : startTime;
-
-  const { data } = await supabase
-    .from("payments")
-    .select("amount, start_time")
-    .eq("client_id", clientId)
-    .gte("paid_at", startOfDay)
-    .lt("paid_at", endOfDay);
-
-  const rows = (data ?? []).filter((r) => {
-    if (!r.start_time) return false;
-    const s = r.start_time.length === 5 ? `${r.start_time}:00` : r.start_time;
-    return s === normalizedStart;
-  });
-  const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
-  return { total, count: rows.length };
+export function escolinhaLabel(categoryName: string | null | undefined): string | null {
+  const n = normCat(categoryName);
+  if (!n.startsWith("escolinha")) return null;
+  if (n.includes("tenis")) return "Escolinha de Tênis";
+  if (n.includes("pickle")) return "Escolinha de Pickleball";
+  return "Escolinha";
 }
 
 interface FamilyMember {
@@ -229,11 +207,20 @@ async function buildNotificationMessage(params: NotifyParams): Promise<
     }
   | { error: string }
 > {
-  const { clientId, amount, accountDirection, paidAt, startTime, categoryName } = params;
+  const {
+    clientId,
+    amount,
+    accountDirection,
+    paidAt,
+    startTime,
+    categoryName,
+    received,
+    referenceMonth,
+  } = params;
 
   const { data: client } = await supabase
     .from("clients")
-    .select("full_name, phone, financial_responsible")
+    .select("full_name, phone, financial_responsible, client_categories(name)")
     .eq("id", clientId)
     .maybeSingle();
 
@@ -266,19 +253,31 @@ async function buildNotificationMessage(params: NotifyParams): Promise<
   const phone = normalizePhoneForWhatsApp(recipientPhone);
   if (!phone) return { error: "Cliente sem telefone cadastrado." };
 
-  // Se temos paidAt + startTime, combina lançamentos do mesmo slot.
-  let displayAmount = amount;
-  let combinedCount = 1;
-  if (paidAt && startTime) {
-    const { total, count } = await getCombinedAmountForSlot(clientId, paidAt, startTime);
-    if (count > 1 && total > 0) {
-      displayAmount = total;
-      combinedCount = count;
-    }
-  }
+  // A mensagem fala só do lançamento que acabou de ser feito. Antes somava
+  // tudo do cliente no mesmo dia/horário (débito + crédito, outra quadra,
+  // luz...) e o cliente recebia um valor misturado. O saldo abaixo já
+  // mostra a situação completa da conta.
+  const displayAmount = amount;
 
+  // Mensalidade de escolinha: lançamento na categoria Escolinha, ou cliente
+  // de escolinha com lançamento "Mensalista" (ou sem categoria) que não é
+  // de quadra — é assim que a recepção lança a mensalidade dos alunos.
+  const clientCatName =
+    (client as { client_categories?: { name: string } | null }).client_categories?.name ?? null;
+  const payCat = normCat(categoryName);
+  const escolinha =
+    escolinhaLabel(categoryName) ??
+    ((payCat === "" || payCat === "mensalista") && !startTime
+      ? escolinhaLabel(clientCatName)
+      : null);
+
+  // Mensalidade paga direto (sem passar pela conta) é recibo: sem saldo.
+  // Se passou pela conta (débito da mensalidade gerado em Turmas e o
+  // pagamento como crédito), o saldo mostra se o mês ficou quitado.
   let saldoBlock: string;
-  if (responsibleId && responsibleFullName) {
+  if (escolinha && !accountDirection) {
+    saldoBlock = "";
+  } else if (responsibleId && responsibleFullName) {
     const family = await getFamilyBalances(responsibleId, responsibleFullName);
     saldoBlock = formatFamilyBlock(
       family,
@@ -302,7 +301,7 @@ async function buildNotificationMessage(params: NotifyParams): Promise<
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
-  const isEstorno = catNorm === "estorno";
+  const isEstorno = catNorm === "estorno" && !escolinha;
 
   const tipo = isEstorno
     ? "estorno"
@@ -320,6 +319,9 @@ async function buildNotificationMessage(params: NotifyParams): Promise<
     const d = new Date(paidAt);
     if (!Number.isNaN(d.getTime())) {
       const dia = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Recife" }).format(d);
+      if (escolinha) {
+        quandoLinha = `*Data:* ${dia}`;
+      }
       const horaSlot = startTime
         ? startTime.length >= 5
           ? startTime.slice(0, 5)
@@ -332,14 +334,20 @@ async function buildNotificationMessage(params: NotifyParams): Promise<
           minute: "2-digit",
           timeZone: "America/Recife",
         }).format(d);
-      quandoLinha = `*Data:* ${dia} às *${hora}*`;
+      if (!escolinha) quandoLinha = `*Data:* ${dia} às *${hora}*`;
     }
   }
 
-  const linhaLancamento =
-    combinedCount > 1
-      ? `Realizamos ${combinedCount} ${tipo}s totalizando *${fmtBRL(displayAmount)}* ${contaRef} referentes à utilização da quadra.`
-      : `Realizamos o ${tipo} de *${fmtBRL(displayAmount)}* ${contaRef} referente à utilização da quadra.`;
+  const deQuem = dependentFirstName ? ` de ${dependentFirstName}` : "";
+  const mesRef = referenceMonth ? ` de ${longMonthRef(referenceMonth)}` : "";
+  const mensalidade = `*mensalidade${mesRef} da ${escolinha}*${deQuem}`;
+  const linhaLancamento = escolinha
+    ? accountDirection === "debito"
+      ? `Lançamos a ${mensalidade} no valor de *${fmtBRL(displayAmount)}* ${contaRef}.`
+      : received === false && accountDirection !== "credito"
+        ? `Registramos a ${mensalidade} no valor de *${fmtBRL(displayAmount)}*, ainda *em aberto*.`
+        : `Recebemos o pagamento de *${fmtBRL(displayAmount)}* referente à ${mensalidade}.`
+    : `Realizamos o ${tipo} de *${fmtBRL(displayAmount)}* ${contaRef} referente à utilização da quadra.`;
 
   const intro = dependentFirstName
     ? `Olá ${recipientFirstName}! Stadium Rackets.\n\n*Esta mensagem é referente ao seu dependente ${dependentFirstName}* (não à sua conta pessoal).`
@@ -347,11 +355,14 @@ async function buildNotificationMessage(params: NotifyParams): Promise<
 
   const debtReminder = await buildOpenDebtReminder(clientId, dependentFirstName);
 
+  // A mensagem do lançamento NÃO confirma reserva: a confirmação vai em
+  // mensagem separada (offerBookingReservedNotification). As duas juntas
+  // confundiam o cliente.
   const message =
     `${intro}\n\n` +
     `${linhaLancamento}\n` +
     (quandoLinha ? `${quandoLinha}\n` : "") +
-    `\n${saldoBlock}\n\n` +
+    (saldoBlock ? `\n${saldoBlock}\n\n` : "\n") +
     (debtReminder ? `${debtReminder}\n\n` : "") +
     `Qualquer dúvida estamos à disposição. Obrigado!`;
 
@@ -377,7 +388,7 @@ export async function offerWhatsAppPaymentNotification(
   toast.success(`Avisar ${firstName} no WhatsApp?`, {
     id: `wa-${params.clientId}-${Date.now()}`,
     description: "Clique para enviar a mensagem com o saldo atualizado.",
-    duration: 10000,
+    duration: Infinity, // fica até clicar em Enviar ou fechar no X
     action: {
       label: "Enviar WhatsApp",
       onClick: () => {
@@ -757,7 +768,7 @@ export async function offerBookingReservedNotification(params: {
   toast.success(`Avisar ${firstName} no WhatsApp?`, {
     id: `wa-booking-${params.clientId}-${Date.now()}`,
     description: "Reserva criada. Envie a confirmação ao cliente.",
-    duration: 10000,
+    duration: Infinity, // fica até clicar em Enviar ou fechar no X
     action: {
       label: "Enviar WhatsApp",
       onClick: () => {
@@ -848,7 +859,7 @@ export async function offerBookingCourtChangeNotification(params: {
   toast.success(`Avisar ${firstName} sobre mudança de quadra?`, {
     id: `wa-move-${params.clientId}-${Date.now()}`,
     description: `${courtShort(params.fromCourt)} → ${courtShort(params.toCourt)} · ${s}–${e}`,
-    duration: 12000,
+    duration: Infinity, // fica até clicar em Enviar ou fechar no X
     action: {
       label: "Enviar WhatsApp",
       onClick: () => {
@@ -940,7 +951,7 @@ export async function offerBookingCancelledNotification(params: {
   toast.success(`Avisar ${firstName} sobre cancelamento?`, {
     id: `wa-cancel-${params.clientId}-${Date.now()}`,
     description: `${quadra} · ${s}–${e}`,
-    duration: 12000,
+    duration: Infinity, // fica até clicar em Enviar ou fechar no X
     action: {
       label: "Enviar WhatsApp",
       onClick: () => {

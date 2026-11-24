@@ -24,7 +24,9 @@ import { fmtBRL, fmtDateTime, todayISO, normalizeText, dateISOInRecife, recifeDa
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/useConfirm";
 import { offerWhatsAppPaymentNotification, sendWhatsAppPaymentNotification } from "@/lib/whatsapp";
-import { Plus, Loader2, UserPlus, Pencil, CalendarIcon, Printer, Trash2, X, Paperclip, MessageCircle } from "lucide-react";
+import { isEscolinhaCategory, hasReferenceMonth, mensalidadeMonthOptions, currentMonthRef, shortMonthRef } from "@/lib/mensalidade";
+import { isPlayPickleballCategory, PLAYS_PER_MONTH } from "@/lib/play-pickleball";
+import { Plus, Loader2, UserPlus, Pencil, CalendarIcon, Printer, Trash2, X, Paperclip, MessageCircle, HandCoins } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -32,7 +34,7 @@ import { format, startOfMonth, endOfMonth, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { logAction } from "@/lib/audit";
-import { isSaldoAnterior } from "@/lib/category";
+import { isSaldoAnterior, isStockCategory, isAvulsoCategoryName } from "@/lib/category";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { ClientDialog } from "@/routes/clientes";
 import { useUrlState } from "@/hooks/useUrlState";
@@ -44,7 +46,10 @@ import {
   OPEN_DEBT_SETTLEMENT_NOTE,
   receiveOpenDebtAmount,
   type ReceiveOpenDebtValue,
+  fetchOpenDebtByClient,
+  insertOpenDebtSettlement,
 } from "@/lib/open-debt";
+import { CreditConfirmDialog, type CreditConfirmRequest } from "@/components/CreditConfirmDialog";
 import {
   PAYMENT_METHOD_LABELS as METHOD_LABELS,
   PAYMENT_METHOD_OPTIONS as METHOD_OPTIONS,
@@ -79,6 +84,7 @@ interface CategoryRow {
   id: string;
   name: string;
   default_amount: number;
+  stock_item_id?: string | null;
 }
 interface PaymentRow {
   id: string;
@@ -98,6 +104,7 @@ interface PaymentRow {
   updated_at: string | null;
   recorded_by: string | null;
   is_new_plan_sale?: boolean;
+  reference_month?: string | null;
   clients: { full_name: string; category_id?: string | null } | null;
   profiles: { full_name: string } | null;
   updater: { full_name: string } | null;
@@ -110,7 +117,7 @@ const methodLabel = (m?: string | null) =>
 
 
 
-import { COURTS, courtLabel, courtShort } from "@/lib/court-map";
+import { COURTS, courtLabel, courtShort, isRankingCategoryName } from "@/lib/court-map";
 const NEW_CLIENT_VALUE = "__new__";
 const NONE_VALUE = "__none__";
 
@@ -136,6 +143,10 @@ interface FormState {
   commissionUserId: string;
   quantity: string;
   isPendingPayment: boolean;
+  /** Mês da mensalidade da escolinha ("2026-11-01"); vazio nas demais categorias. */
+  referenceMonth: string;
+  /** Mensalidade da Escolinha Pickleball paga junto com o Play do mês. */
+  includePlay: boolean;
 }
 
 const emptyForm = (): FormState => ({
@@ -157,6 +168,8 @@ const emptyForm = (): FormState => ({
   commissionUserId: "",
   quantity: "1",
   isPendingPayment: false,
+  referenceMonth: "",
+  includePlay: false,
 });
 
 
@@ -181,10 +194,19 @@ function CaixaPage() {
 
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
+  const playCategoryId =
+    categories.find((c) => isPlayPickleballCategory(normalizeCategoryName(c.name)))?.id ?? null;
   const [priceBands, setPriceBands] = useState<PriceBand[]>([]);
   const [amountManuallyEdited, setAmountManuallyEdited] = useState(false);
   const [editAmountManuallyEdited, setEditAmountManuallyEdited] = useState(false);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
+  // Débito em aberto de cada cliente que tem débito na conta na lista — é o
+  // que o botão "Receber" pode quitar.
+  const [openDebtByClient, setOpenDebtByClient] = useState<Record<string, number>>({});
+  const [receiveFor, setReceiveFor] = useState<PaymentRow | null>(null);
+  const [receiveAmount, setReceiveAmount] = useState("");
+  const [receiveMethod, setReceiveMethod] = useState("");
+  const [receiving, setReceiving] = useState(false);
   const [extraEntries, setExtraEntries] = useState<PaymentRow[]>([]);
   const [paymentsWithReceipt, setPaymentsWithReceipt] = useState<Set<string>>(new Set());
   const [receiptPathsByPayment, setReceiptPathsByPayment] = useState<Record<string, string>>({});
@@ -372,7 +394,7 @@ function CaixaPage() {
           "id, full_name, custom_amount, category_id, default_discount_percent, active, client_categories(name, default_amount)",
           { build: (q) => q.eq("active", true) },
         ),
-        supabase.from("client_categories").select("id, name, default_amount").eq("active", true).order("name"),
+        supabase.from("client_categories").select("id, name, default_amount, stock_item_id").eq("active", true).order("name"),
         supabase
           .from("price_table")
           .select("id, categories, weekday, start_time, end_time, price_per_hour, courts, starts_on, ends_on"),
@@ -444,7 +466,7 @@ function CaixaPage() {
       // por isso fetchAll pagina em blocos de 1000 até trazer tudo.
       const paymentsData = await fetchAll<Omit<PaymentRow, "profiles" | "updater"> & { recorded_by: string | null; updated_by: string | null }>(
         "payments",
-        "id, client_id, category_id, amount, passthrough_amount, method, paid_at, start_time, end_time, court, received, to_account, account_direction, notes, recorded_by, updated_by, updated_at, is_new_plan_sale, commission_user_id, clients(full_name, category_id)",
+        "id, client_id, category_id, amount, passthrough_amount, method, paid_at, start_time, end_time, court, received, to_account, account_direction, notes, recorded_by, updated_by, updated_at, is_new_plan_sale, commission_user_id, reference_month, clients(full_name, category_id)",
         {
           build: (q) =>
             q.gte("paid_at", startOfDay).lt("paid_at", endOfDay).order("paid_at", { ascending: false }),
@@ -485,6 +507,18 @@ function CaixaPage() {
       updater: p.updated_by ? profilesMap[p.updated_by] ?? null : null,
     }));
     setPayments(enriched);
+    {
+      const debtClientIds = Array.from(
+        new Set(
+          enriched
+            .filter((p) => p.client_id && p.account_direction === "debito" && !p.received)
+            .map((p) => p.client_id as string),
+        ),
+      );
+      void fetchOpenDebtByClient(debtClientIds).then((m) =>
+        setOpenDebtByClient(Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v.debt]))),
+      );
+    }
     // Carregar quais pagamentos possuem comprovante anexado
     if (paymentIds.length > 0) {
       const setIds = new Set<string>();
@@ -625,10 +659,9 @@ function CaixaPage() {
     const c = clients.find((c) => c.id === form.clientIds[0]);
     if (!c) return;
     const v = c.custom_amount ?? c.client_categories?.default_amount ?? 0;
-    // Mensalista sem desconto próprio cadastrado usa 10% por padrão — mesma
-    // regra do formulário de pagamento em Finanças (NewPaymentDialog.tsx).
-    const clientDiscount =
-      c.default_discount_percent != null ? Number(c.default_discount_percent) : 10;
+    // Stadium: sem desconto padrão de mensalista — só o desconto cadastrado
+    // no próprio cliente (0 = valor cheio).
+    const clientDiscount = Number(c.default_discount_percent) || 0;
     // Só aplica desconto se a categoria SELECIONADA no form for mensalista
     // E não for crédito em C/C (creditar na conta corrente não tem desconto).
     // Se o usuário digitou o valor manualmente, assume que já é o valor final
@@ -647,11 +680,28 @@ function CaixaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.clientIds, form.categoryId, form.accountDirection, amountManuallyEdited, clients, categories]);
 
+  // Mensalidade da escolinha: a categoria costuma vir preenchida pelo
+  // cadastro do cliente (sem passar pelo seletor), então o mês e o crédito
+  // em conta são ajustados aqui também.
+  useEffect(() => {
+    const norm = normalizeCategoryName(categories.find((c) => c.id === form.categoryId)?.name);
+    if (!isEscolinhaCategory(norm) || form.referenceMonth) return;
+    setForm((f) => ({
+      ...f,
+      referenceMonth: currentMonthRef(),
+      court: "",
+      startTime: "",
+      endTime: "",
+      accountDirection: "credito",
+      received: true,
+    }));
+  }, [form.categoryId, form.referenceMonth, categories]);
+
   // Auto-fill amount from price table (create form) — débito da C/C OU categoria "Avulso"
   useEffect(() => {
     if (amountManuallyEdited) return;
     const catNorm = normalizeCategoryName(categories.find((c) => c.id === form.categoryId)?.name);
-    const isAvulso = catNorm === "avulso";
+    const isAvulso = isAvulsoCategoryName(catNorm);
     if (form.accountDirection !== "debito" && !isAvulso) return;
     if (!form.startTime || !form.endTime || !form.paidAt) return;
     const wd = weekdayFromYmd(form.paidAt);
@@ -680,7 +730,7 @@ function CaixaPage() {
   useEffect(() => {
     if (editAmountManuallyEdited) return;
     const catNorm = normalizeCategoryName(categories.find((c) => c.id === editForm.categoryId)?.name);
-    const isAvulso = catNorm === "avulso";
+    const isAvulso = isAvulsoCategoryName(catNorm);
     if (editForm.accountDirection !== "debito" && !isAvulso) return;
     if (!editForm.startTime || !editForm.endTime || !editForm.paidAt) return;
     const wd = weekdayFromYmd(editForm.paidAt);
@@ -722,8 +772,8 @@ function CaixaPage() {
     const isEstorno = catNorm === "estorno";
     const isGympass = catNorm === "credito gympass";
     const isAutoCCPayload = isGympass;
-    const isStockCat = catNorm === "grip" || catNorm === "terno de bola";
-    const isRanking = catNorm === "ranking masculino" || catNorm === "ranking feminino";
+    const isStockCat = isStockCategory(categories.find((c) => c.id === f.categoryId));
+    const isRanking = isRankingCategoryName(catNorm);
 
     const rawAmount = overrideAmount !== undefined ? overrideAmount : Number(f.amount) || 0;
     const pct = Math.min(Math.max(Number(f.discountPercent) || 0, 0), 100);
@@ -746,7 +796,11 @@ function CaixaPage() {
       start_time: isEstorno ? null : f.startTime || null,
       end_time: isEstorno ? null : f.endTime || null,
       court: isEstorno ? null : f.court ? Number(f.court) : null,
-      received: isRanking
+      // Débito na conta não é dinheiro recebido: o pagamento do cliente entra
+      // depois como crédito (botão "Receber" na linha).
+      received: !isEstorno && !isAutoCCPayload && f.accountDirection === "debito"
+        ? false
+        : isRanking
         ? f.received
         : finalAmount === 0
           ? true
@@ -763,6 +817,7 @@ function CaixaPage() {
         !isEstorno && f.isNewPlanSale ? f.commissionUserId || user?.id || null : null,
       quantity: isStockCat ? Math.max(1, parseInt(f.quantity, 10) || 1) : 1,
       is_pending_payment: isStockCat ? f.isPendingPayment : false,
+      reference_month: hasReferenceMonth(catNorm) ? f.referenceMonth || null : null,
     };
 
   };
@@ -804,6 +859,38 @@ function CaixaPage() {
     if (submitCatNorm === "estorno") {
       setForm((f) => ({ ...f, amount: "", method: "", court: "", startTime: "", endTime: "", received: true, accountDirection: "credito", isNewPlanSale: false }));
     }
+    if (hasReferenceMonth(submitCatNorm)) {
+      const oQue = isPlayPickleballCategory(submitCatNorm) ? "Play" : "mensalidade";
+      if (!form.referenceMonth) {
+        toast.error(`Escolha o mês ${oQue === "Play" ? "do Play" : "da mensalidade"}.`);
+        return;
+      }
+      if ((form.received || form.includePlay) && !form.method) {
+        toast.error(`Escolha a forma de pagamento ${oQue === "Play" ? "do Play" : "da mensalidade"}.`);
+        return;
+      }
+      const checks: { catId: string; label: string }[] = [{ catId: form.categoryId, label: oQue }];
+      if (form.includePlay && playCategoryId && isEscolinhaCategory(submitCatNorm)) {
+        checks.push({ catId: playCategoryId, label: "Play" });
+      }
+      for (const chk of checks) {
+        const { data: jaPagos } = await supabase
+          .from("payments")
+          .select("client_id, clients(full_name)")
+          .in("client_id", form.clientIds)
+          .eq("category_id", chk.catId)
+          .eq("reference_month", form.referenceMonth);
+        if (jaPagos && jaPagos.length > 0) {
+          const nomes = Array.from(
+            new Set(jaPagos.map((r) => (r.clients as { full_name: string } | null)?.full_name ?? "cliente")),
+          ).join(", ");
+          const ok = await confirm(
+            `${nomes} já tem ${chk.label} de ${shortMonthRef(form.referenceMonth)} lançado(a). Lançar de novo?`,
+          );
+          if (!ok) return;
+        }
+      }
+    }
     if (submitCatNorm === "mensalista" && form.accountDirection === "credito" && !form.method) {
       toast.error("Mensalista com Crédito exige uma forma de pagamento.");
       return;
@@ -814,7 +901,7 @@ function CaixaPage() {
       toast.error(MENSALISTA_CREDITO_COM_QUADRA_MSG, { duration: 10000 });
       return;
     }
-    if ((submitCatNorm === "ranking masculino" || submitCatNorm === "ranking feminino") && (!form.court || !form.startTime)) {
+    if ((isRankingCategoryName(submitCatNorm)) && (!form.court || !form.startTime)) {
       toast.error("Para Ranking, informe a quadra e o horário de início.");
       return;
     }
@@ -861,6 +948,26 @@ function CaixaPage() {
       rows = [buildInsertPayload(form, single)];
     }
 
+    // Mensalidade da Escolinha Pickleball paga junto com o Play: o Play vira
+    // um lançamento à parte (categoria Play Pickleball, pagamento direto), pra
+    // a mensalidade continuar abatendo só o débito dela e o Play contar como
+    // pacote do mês.
+    if (form.includePlay && playCategoryId && isEscolinhaCategory(submitCatNorm) && form.referenceMonth) {
+      const playPrice = Number(categories.find((c) => c.id === playCategoryId)?.default_amount) || 80;
+      for (const cid of form.clientIds) {
+        rows.push({
+          ...buildInsertPayload(form, cid, playPrice),
+          category_id: playCategoryId,
+          amount: playPrice,
+          received: true,
+          to_account: false,
+          account_direction: null,
+          notes: `Play pickleball (${PLAYS_PER_MONTH} plays) — pago junto com a mensalidade`,
+          reference_month: form.referenceMonth,
+        });
+      }
+    }
+
     if (debtToReceive > 0 && debtCreditCatId) {
       rows.push({
         client_id: form.clientIds[0],
@@ -880,6 +987,7 @@ function CaixaPage() {
         commission_user_id: null,
         quantity: 1,
         is_pending_payment: false,
+        reference_month: null,
       });
     }
 
@@ -891,7 +999,7 @@ function CaixaPage() {
     const { data: inserted, error } = await supabase
       .from("payments")
       .insert(rows.map((r) => ({ ...r, recorded_by: recorderId })))
-      .select("id, amount, client_id");
+      .select("id, amount, client_id, received, category_id");
     setSubmitting(false);
     if (error) {
       toast.error(error.message);
@@ -974,9 +1082,13 @@ function CaixaPage() {
         // Agrupa por client_id para somar quando o mesmo cliente recebeu múltiplas
         // entradas no mesmo lançamento (improvável, mas seguro).
         const byClient = new Map<string, number>();
+        const receivedByClient = new Map<string, boolean>();
         for (const p of inserted) {
           if (!p.client_id) continue;
+          // O Play pago junto não entra no valor da mensagem da mensalidade.
+          if (form.includePlay && playCategoryId && p.category_id === playCategoryId && p.category_id !== form.categoryId) continue;
           byClient.set(p.client_id, (byClient.get(p.client_id) ?? 0) + (Number(p.amount) || 0));
+          receivedByClient.set(p.client_id, (receivedByClient.get(p.client_id) ?? true) && !!p.received);
         }
         // A quitação do débito não entra no valor "do lançamento" da
         // mensagem — o saldo atualizado já aparece nela.
@@ -996,6 +1108,8 @@ function CaixaPage() {
               paidAt: paidAtIso,
               startTime: form.startTime || null,
               categoryName: catName,
+              received: receivedByClient.get(clientId) ?? null,
+              referenceMonth: isEscolinhaCategory(normalizeCategoryName(catName)) ? form.referenceMonth || null : null,
             },
             (cid) => markClientNotified(cid),
           );
@@ -1028,6 +1142,8 @@ function CaixaPage() {
         "",
       quantity: String((p as PaymentRow & { quantity?: number | null }).quantity ?? 1),
       isPendingPayment: (p as PaymentRow & { is_pending_payment?: boolean | null }).is_pending_payment ?? false,
+      referenceMonth: p.reference_month ?? "",
+      includePlay: false,
     });
 
     setEditAmountManuallyEdited(true); // don't overwrite existing amount when opening edit
@@ -1141,6 +1257,13 @@ function CaixaPage() {
       toast.error("Selecione um cliente.");
       return;
     }
+    if (
+      hasReferenceMonth(normalizeCategoryName(categories.find((c) => c.id === editForm.categoryId)?.name)) &&
+      !editForm.referenceMonth
+    ) {
+      toast.error("Escolha o mês da mensalidade.");
+      return;
+    }
     if (!editForm.categoryId) {
       toast.error("Selecione uma categoria.");
       return;
@@ -1161,7 +1284,7 @@ function CaixaPage() {
       toast.error(MENSALISTA_CREDITO_COM_QUADRA_MSG, { duration: 10000 });
       return;
     }
-    if ((editCatNorm === "ranking masculino" || editCatNorm === "ranking feminino") && (!editForm.court || !editForm.startTime)) {
+    if ((isRankingCategoryName(editCatNorm)) && (!editForm.court || !editForm.startTime)) {
       toast.error("Para Ranking, informe a quadra e o horário de início.");
       return;
     }
@@ -1201,6 +1324,32 @@ function CaixaPage() {
       restoreScrollPosition(scrollYBeforeSave);
       loadAll(filterDate, dateMode, { silent: true, preserveScrollY: scrollYBeforeSave });
     }
+  };
+
+  // Cliente pagou um débito na conta: lança o crédito (quitação) com a forma
+  // de pagamento real. A linha do débito continua como está — é o crédito
+  // que zera a conta e que entra no caixa do dia.
+  const handleReceive = async () => {
+    if (!receiveFor?.client_id) return;
+    const amount = Math.round((Number(receiveAmount.replace(",", ".")) || 0) * 100) / 100;
+    if (amount <= 0) return toast.error("Informe o valor recebido.");
+    if (!receiveMethod) return toast.error("Escolha a forma de pagamento.");
+    setReceiving(true);
+    const { error } = await insertOpenDebtSettlement({
+      clientId: receiveFor.client_id,
+      amount,
+      method: receiveMethod,
+    });
+    setReceiving(false);
+    if (error) return toast.error(error);
+    toast.success(`Recebido ${fmtBRL(amount)} de ${receiveFor.clients?.full_name ?? "cliente"}`);
+    const cid = receiveFor.client_id;
+    setReceiveFor(null);
+    void offerWhatsAppPaymentNotification(
+      { clientId: cid, amount, accountDirection: "credito", paidAt: new Date().toISOString() },
+      (c) => markClientNotified(c),
+    );
+    void loadAll(undefined, undefined, { silent: true, preserveScrollY: window.scrollY });
   };
 
   const handleDelete = async (id: string) => {
@@ -1330,6 +1479,7 @@ function CaixaPage() {
   };
 
   // ------- Form fields component (shared between create + edit) -------
+  const [creditAsk, setCreditAsk] = useState<CreditConfirmRequest | null>(null);
   const renderFormFields = (f: FormState, setF: (u: FormState) => void, isCreate: boolean) => {
     const update = (patch: Partial<FormState>) => setF({ ...f, ...patch });
     const fCat = categories.find((x) => x.id === f.categoryId);
@@ -1339,7 +1489,7 @@ function CaixaPage() {
     const isMensalistaDebito = fCatNorm === "mensalista" && f.accountDirection === "debito";
     const isMensalistaCredito = fCatNorm === "mensalista" && f.accountDirection === "credito";
     const isInscricaoRanking = fCatNorm === "inscricao ranking masculino";
-    const isStockCat = fCatNorm === "grip" || fCatNorm === "terno de bola";
+    const isStockCat = isStockCategory(fCat);
     const noTimeCourt = [
       "grip",
       "inscricao ranking masculino",
@@ -1347,7 +1497,7 @@ function CaixaPage() {
       "tenis de mesa (mensalista)",
       "terno de bola",
       "credito gympass",
-    ].includes(fCatNorm) || isMensalistaCredito || isEstorno;
+    ].includes(fCatNorm) || isStockCat || isMensalistaCredito || isEstorno || hasReferenceMonth(fCatNorm);
     return (
       <div className="space-y-4">
         {isCreate ? (
@@ -1606,6 +1756,29 @@ function CaixaPage() {
               const norm = normalizeCategoryName(cat?.name);
               const stillCommissionable = norm === "mensalista";
               const patch: Partial<FormState> = { categoryId: newCatId };
+              if (isEscolinhaCategory(norm)) {
+                if (!f.referenceMonth) patch.referenceMonth = currentMonthRef();
+                patch.court = "";
+                patch.startTime = "";
+                patch.endTime = "";
+                // A mensalidade é débito na conta (Gerar mensalidades) e o
+                // pagamento entra como crédito que abate.
+                patch.accountDirection = "credito";
+                patch.received = true;
+              } else if (isPlayPickleballCategory(norm)) {
+                // Play é pagamento direto (não passa pela conta).
+                if (!f.referenceMonth) patch.referenceMonth = currentMonthRef();
+                patch.court = "";
+                patch.startTime = "";
+                patch.endTime = "";
+                patch.accountDirection = "";
+                patch.received = true;
+                patch.includePlay = false;
+                if (!f.amount) patch.amount = String(Number(cat?.default_amount) || 80);
+              } else {
+                patch.referenceMonth = "";
+                patch.includePlay = false;
+              }
               if (!stillCommissionable) patch.isNewPlanSale = false;
               if (norm === "credito gympass") patch.accountDirection = "credito";
               if (norm !== "credito gympass") patch.passthroughAmount = "";
@@ -1637,6 +1810,49 @@ function CaixaPage() {
             </SelectContent>
           </Select>
         </div>
+
+        {hasReferenceMonth(fCatNorm) && (
+          <div className="space-y-2 rounded-md border border-primary/40 bg-primary/5 p-3">
+            <Label>
+              {isPlayPickleballCategory(fCatNorm) ? "Play referente a" : "Mensalidade referente a"}{" "}
+              <span className="text-destructive">*</span>
+            </Label>
+            <Select value={f.referenceMonth || undefined} onValueChange={(v) => update({ referenceMonth: v })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Escolha o mês" />
+              </SelectTrigger>
+              <SelectContent>
+                {mensalidadeMonthOptions(f.referenceMonth).map(([v, l]) => (
+                  <SelectItem key={v} value={v}>
+                    {l}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {isPlayPickleballCategory(fCatNorm)
+                ? `Dá ${PLAYS_PER_MONTH} plays no mês escolhido (não acumulam). O uso é marcado no mapa, em "Play pickleball".`
+                : "Entra como crédito na conta e abate a mensalidade gerada do mês (Turmas → Gerar mensalidades). Saldo zerado = mês quitado."}{" "}
+              Se o mesmo mês já tiver sido lançado, o sistema avisa.
+            </p>
+            {isCreate && isEscolinhaCategory(fCatNorm) && fCatNorm.includes("pickle") && playCategoryId && (
+              <label className="flex items-start gap-2 text-sm">
+                <Checkbox
+                  className="mt-0.5"
+                  checked={f.includePlay}
+                  onCheckedChange={(v) => update({ includePlay: v === true })}
+                />
+                <span>
+                  Inclui Play do mês (+{fmtBRL(Number(categories.find((c) => c.id === playCategoryId)?.default_amount) || 80)})
+                  <span className="block text-xs text-muted-foreground">
+                    {PLAYS_PER_MONTH} plays no mês. Sai como um lançamento à parte do Play, na mesma
+                    forma de pagamento.
+                  </span>
+                </span>
+              </label>
+            )}
+          </div>
+        )}
 
         {isCreate && canOfferReceiveDebt(f) && (
           <ReceiveOpenDebtOption
@@ -1811,7 +2027,7 @@ function CaixaPage() {
         )}
 
         <div className={`space-y-2 ${noTimeCourt ? "opacity-50" : ""}`}>
-          <Label>Quadra {(fCatNorm === "ranking masculino" || fCatNorm === "ranking feminino" || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
+          <Label>Quadra {(isRankingCategoryName(fCatNorm) || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
           <div className="flex gap-2">
             <Select
               key={f.court === "" ? "empty" : "set"}
@@ -1846,7 +2062,7 @@ function CaixaPage() {
 
         <div className="grid grid-cols-2 gap-4">
           <div className={`space-y-2 ${noTimeCourt ? "opacity-50" : ""}`}>
-            <Label>Horário de início {(fCatNorm === "ranking masculino" || fCatNorm === "ranking feminino" || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
+            <Label>Horário de início {(isRankingCategoryName(fCatNorm) || isMensalistaDebito) && <span className="text-destructive">*</span>}</Label>
             <Input type="time" value={isEstorno ? "" : f.startTime} onChange={(e) => update({ startTime: e.target.value })} disabled={noTimeCourt} />
           </div>
           <div className={`space-y-2 ${noTimeCourt ? "opacity-50" : ""}`}>
@@ -1906,14 +2122,17 @@ function CaixaPage() {
           const hasClient = isCreate ? f.clientIds.length > 0 : !!f.clientId && f.clientId !== NEW_CLIENT_VALUE;
           const eligible =
             hasClient &&
-            (catNorm === "mensalista" || catNorm === "debito avulso" || catNorm === "saldo anterior" || catNorm === "credito gympass" || catNorm === "pendencia avulsa" || catNorm === "energia (luz)" || catNorm === "ranking masculino" || catNorm === "ranking feminino" || isEstornoAccount);
+            (catNorm === "mensalista" || catNorm === "debito avulso" || catNorm === "saldo anterior" || catNorm === "credito gympass" || catNorm === "pendencia avulsa" || catNorm === "energia (luz)" || isRankingCategoryName(catNorm) || isEstornoAccount);
           return (
             <div className="space-y-2">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className={`flex items-center gap-2 rounded-md border p-3 ${isEstornoAccount || isAutoCC ? "opacity-50" : ""}`}>
+                <div
+                  className={`flex items-center gap-2 rounded-md border p-3 ${isEstornoAccount || isAutoCC || f.accountDirection === "debito" ? "opacity-50" : ""}`}
+                  title={f.accountDirection === "debito" ? "Débito na conta não é recebimento. Quando o cliente pagar, use \"Receber\" na linha do lançamento." : undefined}
+                >
                   <Checkbox
-                    disabled={isEstornoAccount || isAutoCC}
-                    checked={!isEstornoAccount && !isAutoCC && f.received}
+                    disabled={isEstornoAccount || isAutoCC || f.accountDirection === "debito"}
+                    checked={!isEstornoAccount && !isAutoCC && f.accountDirection !== "debito" && f.received}
                     onCheckedChange={(v) => update({ received: v === true })}
                   />
                   <Label className="cursor-pointer font-normal">Pagamento recebido</Label>
@@ -1932,14 +2151,29 @@ function CaixaPage() {
                       const next = v === true ? "credito" : "";
                       const cat = categories.find((c) => c.id === f.categoryId);
                       const norm = normalizeCategoryName(cat?.name);
-                      if (next === "credito" && norm === "mensalista") {
-                        update({ accountDirection: next, received: true, court: "", startTime: "", endTime: "" });
-                      } else {
-                        update({ accountDirection: next });
+                      const apply = () => {
+                        if (next === "credito" && norm === "mensalista") {
+                          update({ accountDirection: next, received: true, court: "", startTime: "", endTime: "" });
+                        } else {
+                          update({ accountDirection: next });
+                        }
+                      };
+                      // Marcou crédito: pergunta antes (jogou e pagou na hora
+                      // não é conta corrente — é só Pagamento recebido).
+                      if (next === "credito" && fCatNorm !== "credito gympass") {
+                        setCreditAsk({
+                          clientIds: isCreate ? f.clientIds : [f.clientId],
+                          amount: Number(String(f.amount).replace(",", ".")) || 0,
+                          onAddToAccount: apply,
+                          onPaidNow: () => update({ accountDirection: "", received: true }),
+                        });
+                        return;
                       }
+                      apply();
                     }}
                   />
                   <Label className="cursor-pointer font-normal text-center leading-tight">Creditar na<br />C/C</Label>
+                  <CreditConfirmDialog request={creditAsk} onClose={() => setCreditAsk(null)} />
                 </div>
                 <div
                   className={`flex items-center gap-2 rounded-md border p-3 ${!eligible || fCatNorm === "credito gympass" || isEstornoAccount ? "opacity-50" : ""}`}
@@ -1950,7 +2184,9 @@ function CaixaPage() {
                     onCheckedChange={(v) => {
                       const next = v === true ? "debito" : "";
                       if (next === "debito" && fCatNorm === "mensalista") {
-                        update({ accountDirection: next, method: "" });
+                        update({ accountDirection: next, method: "", received: false });
+                      } else if (next === "debito") {
+                        update({ accountDirection: next, received: false });
                       } else {
                         update({ accountDirection: next });
                       }
@@ -1959,9 +2195,15 @@ function CaixaPage() {
                   <Label className="cursor-pointer font-normal text-center leading-tight">Debitar da<br />C/C</Label>
                 </div>
               </div>
+              {f.accountDirection === "debito" && (
+                <p className="text-xs text-muted-foreground">
+                  Débito na conta fica em aberto na conta do cliente — não é recebimento. Quando ele
+                  pagar, use o botão <strong>Receber</strong> na linha do lançamento.
+                </p>
+              )}
               {!eligible && (
                 <p className="text-xs text-muted-foreground">
-                  Crédito/Débito em conta corrente disponível apenas para categorias <strong>Mensalista</strong>, <strong>Débito avulso</strong>, <strong>Saldo anterior</strong> ou <strong>crédito GYMPASS</strong>.
+                  Crédito/Débito em conta corrente disponível apenas para categorias <strong>Mensalista</strong>, <strong>Débito avulso</strong> ou <strong>Saldo anterior</strong>.
                 </p>
               )}
             </div>
@@ -2026,7 +2268,22 @@ function CaixaPage() {
           <Button variant="outline" onClick={handlePrint} disabled={visiblePayments.length === 0}>
             <Printer className="h-4 w-4 mr-2" /> Imprimir
           </Button>
-          <Dialog open={open} onOpenChange={setOpen}>
+          <Dialog
+            open={open}
+            onOpenChange={(v) => {
+              // Abrir pelo botão começa sempre do zero: sem isso, fechar sem
+              // salvar deixava os dados digitados para a próxima abertura. A
+              // abertura automática (cancelamento tardio) usa setOpen direto
+              // e mantém o formulário pré-preenchido.
+              if (v) {
+                setForm(emptyForm());
+                setAmountManuallyEdited(false);
+                setReceiptFile(null);
+                setReceiveDebt(EMPTY_RECEIVE_OPEN_DEBT);
+              }
+              setOpen(v);
+            }}
+          >
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" /> Novo pagamento
@@ -2236,6 +2493,11 @@ function CaixaPage() {
                           return (
                             <div className="flex items-center gap-1.5">
                               {name ?? <span className="text-muted-foreground">—</span>}
+                              {p.reference_month && (
+                                <Badge variant="outline" title="Mensalidade referente a este mês">
+                                  {shortMonthRef(p.reference_month)}
+                                </Badge>
+                              )}
                             </div>
                           );
                         })()}
@@ -2368,6 +2630,24 @@ function CaixaPage() {
                               <MessageCircle className="h-4 w-4 text-green-600" />
                             </Button>
                           )}
+                          {p.client_id &&
+                            p.account_direction === "debito" &&
+                            !p.received &&
+                            (openDebtByClient[p.client_id] ?? 0) > 0 && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                title="Receber (cliente pagou este débito)"
+                                onClick={() => {
+                                  const debt = openDebtByClient[p.client_id as string] ?? 0;
+                                  setReceiveFor(p);
+                                  setReceiveAmount(Math.min(Number(p.amount) || 0, debt).toFixed(2));
+                                  setReceiveMethod("");
+                                }}
+                              >
+                                <HandCoins className="h-4 w-4 text-emerald-600" />
+                              </Button>
+                            )}
                           <Button size="icon" variant="ghost" onClick={() => openEdit(p)}>
                             <Pencil className="h-4 w-4" />
                           </Button>
@@ -2431,6 +2711,55 @@ function CaixaPage() {
       </Card>
 
       {/* Edit dialog */}
+      <Dialog open={!!receiveFor} onOpenChange={(o) => !o && setReceiveFor(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Receber débito</DialogTitle>
+          </DialogHeader>
+          {receiveFor && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                {receiveFor.clients?.full_name ?? "Cliente"} tem{" "}
+                <strong>{fmtBRL(openDebtByClient[receiveFor.client_id ?? ""] ?? 0)}</strong> em aberto
+                na conta. O valor recebido entra como crédito na conta e no caixa de hoje.
+              </p>
+              <div className="space-y-1">
+                <Label>Valor recebido (R$)</Label>
+                <Input
+                  inputMode="decimal"
+                  value={receiveAmount}
+                  onChange={(e) => setReceiveAmount(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Forma de pagamento</Label>
+                <Select value={receiveMethod || undefined} onValueChange={setReceiveMethod}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {METHOD_OPTIONS.map(([v, l]) => (
+                      <SelectItem key={v} value={v}>
+                        {l}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setReceiveFor(null)}>
+                  Cancelar
+                </Button>
+                <Button type="button" onClick={handleReceive} disabled={receiving}>
+                  {receiving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Receber
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>

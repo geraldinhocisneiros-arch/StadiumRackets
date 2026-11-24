@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +41,8 @@ interface Schedule {
   teachers?: { id: string; name: string } | null;
   valid_from?: string | null;
   valid_until?: string | null;
+  // Matrícula de turma de pickleball: é gerida na tela de Turmas.
+  class_id?: string | null;
 }
 
 const fmtBR = (iso: string | null | undefined) => {
@@ -149,7 +152,13 @@ export function ClientSchedulesCard({
             : "Permanente"}
       </TableCell>
       <TableCell className="text-muted-foreground text-sm">{s.notes ?? "—"}</TableCell>
-      {canManage && (
+      {canManage && s.class_id ? (
+        <TableCell className="text-right text-xs">
+          <Link to="/turmas" className="underline-offset-2 hover:underline">
+            Gerir em Turmas
+          </Link>
+        </TableCell>
+      ) : canManage && (
         <TableCell className="text-right">
           {!isEnded && (
             <Button
@@ -197,6 +206,7 @@ export function ClientSchedulesCard({
                 <Plus className="h-4 w-4 mr-2" /> Adicionar horário
               </Button>
               <ScheduleDialog
+                open={open}
                 clientId={clientId}
                 editing={editing}
                 teachers={teachers.filter((t) => t.active || t.id === editing?.teacher_id)}
@@ -268,12 +278,14 @@ export function ClientSchedulesCard({
 }
 
 function ScheduleDialog({
+  open,
   clientId,
   editing,
   teachers,
   onSaved,
   onClose,
 }: {
+  open: boolean;
   clientId: string;
   editing: Schedule | null;
   teachers: Teacher[];
@@ -295,6 +307,7 @@ function ScheduleDialog({
   } | null>(null);
 
   useEffect(() => {
+    if (!open) return;
     setWeekday(editing ? String(editing.weekday) : "2");
     setStartTime(editing ? timeShort(editing.start_time) : "09:00");
     setEndTime(editing ? timeShort(editing.end_time) : "10:00");
@@ -304,7 +317,7 @@ function ScheduleDialog({
     setValidFrom(editing?.valid_from ?? "");
     setValidUntil(editing?.valid_until ?? "");
     setShareConflict(null);
-  }, [editing]);
+  }, [editing, open]);
 
   // Quem já ocupa essa quadra/dia/horário — usado tanto pra oferecer
   // "dividir a quadra" quando dá conflito quanto pra saber quais ids

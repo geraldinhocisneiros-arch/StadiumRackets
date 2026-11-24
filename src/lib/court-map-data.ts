@@ -96,7 +96,7 @@ export async function fetchCourtMapData(date: string): Promise<CourtMapData> {
     supabase
       .from("client_schedules")
       .select(
-        "*, clients!client_id(id, full_name), teachers(id, name)",
+        "*, clients!client_id(id, full_name), teachers(id, name), pickleball_classes(id, name)",
       )
       .eq("weekday", weekday)
       .or(`valid_from.is.null,valid_from.lte.${date}`)

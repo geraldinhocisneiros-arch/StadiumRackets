@@ -231,7 +231,14 @@ function ExceptionsPage() {
               <Printer className="h-3.5 w-3.5 mr-2" /> Imprimir
             </Button>
             {isDiretoria && (
-              <Button size="sm" onClick={() => setAddExceptionOpen(true)}>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setExceptionClientId("");
+                  setExceptionReason("");
+                  setAddExceptionOpen(true);
+                }}
+              >
                 <Plus className="h-3.5 w-3.5 mr-2" /> Adicionar exceção
               </Button>
             )}

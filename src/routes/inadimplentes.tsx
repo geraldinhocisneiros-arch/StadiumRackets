@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { MonthEndProjectionButton } from "@/components/MonthEndProjectionButton";
+import { CategoryTabs, type CategoryOption } from "@/components/CategoryTabs";
 
 export const Route = createFileRoute("/inadimplentes")({
   component: () => (
@@ -84,8 +85,8 @@ interface Row {
   balance: number;
   message_sent: boolean;
   followup_date: string | null;
-  is_gympass: boolean;
   is_debt_limit_excepted: boolean;
+  category_id: string | null;
 }
 
 interface WeekSnapshot {
@@ -127,13 +128,14 @@ function InadimplentesPage() {
   const [letterTo, setLetterTo] = useUrlState<string>("letterTo", "all");
   const [sortBy, setSortBy] = useUrlState<string>("sortBy", "balance_asc");
   const [followupFilter, setFollowupFilter] = useUrlState<string>("followup", "all");
-  const [gympassFilter, setGympassFilter] = useUrlState<string>("gympass", "all");
+  const [categoryFilter, setCategoryFilter] = useUrlState<string>("cat", "all");
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [queueIds, setQueueIds] = useState<string[] | null>(null);
   const [queueIdx, setQueueIdx] = useState(0);
 
   const load = async () => {
     setLoading(true);
-    const [cliAll, entries, { data: followups }, { data: exceptedIds }] = await Promise.all([
+    const [cliAll, entries, { data: followups }, { data: exceptedIds }, { data: cats }] = await Promise.all([
       // fetchAll em vez de select() cru: o Supabase limita seleções sem
       // paginação a 1000 linhas por padrão. Com 1181+ clientes ativos, essa
       // busca cortava silenciosamente uma parte (em ordem alfabética) da
@@ -147,10 +149,10 @@ function InadimplentesPage() {
         due_day: number | null;
         financial_responsible: string | null;
         active: boolean;
-        is_gympass: boolean;
+        category_id: string | null;
       }>(
         "clients",
-        "id, full_name, phone, email, due_day, financial_responsible, active, is_gympass",
+        "id, full_name, phone, email, due_day, financial_responsible, active, category_id",
       ),
       fetchAll<{ client_id: string; entry_type: string; amount: number; entry_date: string }>(
         "account_entries",
@@ -158,7 +160,10 @@ function InadimplentesPage() {
       ),
       supabase.from("client_followups" as any).select("client_id, message_sent, followup_date"),
       supabase.rpc("debt_limit_excepted_client_ids" as any),
+      supabase.from("client_categories").select("id, name").order("name"),
     ]);
+
+    setCategories((cats ?? []) as CategoryOption[]);
 
     const cli = cliAll
       .filter((c) => c.active)
@@ -203,8 +208,8 @@ function InadimplentesPage() {
           balance: balanceMap.get(c.id) ?? 0,
           message_sent: fu?.message_sent ?? false,
           followup_date: fu?.followup_date ?? null,
-          is_gympass: !!c.is_gympass,
           is_debt_limit_excepted: exceptedSet.has(c.id),
+          category_id: c.category_id ?? null,
         };
       })
       .filter((c) => c.balance < 0)
@@ -414,9 +419,8 @@ function InadimplentesPage() {
           if (!fd || fd < todayStr || fd > weekEndStr) return false;
         }
       }
-      if (gympassFilter !== "all") {
-        if (gympassFilter === "gympass" && !r.is_gympass) return false;
-        if (gympassFilter === "none" && r.is_gympass) return false;
+      if (categoryFilter !== "all") {
+        if (categoryFilter === "none" ? r.category_id : r.category_id !== categoryFilter) return false;
       }
       return true;
     });
@@ -437,11 +441,20 @@ function InadimplentesPage() {
         break;
     }
     return sorted;
-  }, [rows, search, letterFrom, letterTo, sortBy, followupFilter, gympassFilter]);
+  }, [rows, search, letterFrom, letterTo, sortBy, followupFilter, categoryFilter]);
 
   const total = useMemo(() => filtered.reduce((s, r) => s + r.balance, 0), [filtered]);
 
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+
+  const categoryName = (id: string | null) =>
+    id ? (categories.find((c) => c.id === id)?.name ?? "—") : "—";
+  const selectedCategoryLabel =
+    categoryFilter === "all"
+      ? null
+      : categoryFilter === "none"
+        ? "Sem categoria"
+        : categoryName(categoryFilter);
 
   return (
     <div className="space-y-6">
@@ -449,6 +462,11 @@ function InadimplentesPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Inadimplentes</h1>
           <p className="text-muted-foreground">Clientes ativos com saldo negativo na conta</p>
+          {selectedCategoryLabel && (
+            <p className="hidden print:block text-sm font-medium mt-1">
+              Categoria: {selectedCategoryLabel}
+            </p>
+          )}
           <p className="text-xs text-muted-foreground mt-1">
             <span className="text-orange-500 font-bold">*</span> = na lista de exceções — não
             cobrar automaticamente
@@ -549,6 +567,12 @@ function InadimplentesPage() {
 
       <Card>
         <CardContent className="pt-6 space-y-4">
+          <CategoryTabs
+            categories={categories}
+            items={rows}
+            value={categoryFilter}
+            onChange={setCategoryFilter}
+          />
           <div className="flex items-center gap-3 flex-wrap">
             <Input
               placeholder="Buscar por nome..."
@@ -606,26 +630,16 @@ function InadimplentesPage() {
                 <SelectItem value="none">Sem follow up</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={gympassFilter} onValueChange={setGympassFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Gympass" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os clientes</SelectItem>
-                <SelectItem value="gympass">Apenas Gympass</SelectItem>
-                <SelectItem value="none">Sem Gympass</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Cliente</TableHead>
+                  <TableHead>Categoria</TableHead>
                   <TableHead>Responsável financeiro</TableHead>
                   <TableHead>Telefone</TableHead>
                   <TableHead className="text-center">Dia venc.</TableHead>
-                  <TableHead className="text-center">Gympass</TableHead>
                   <TableHead className="text-right">Saldo</TableHead>
                   <TableHead className="text-center">
                     <div className="flex flex-col items-center gap-1">
@@ -697,6 +711,9 @@ function InadimplentesPage() {
                           </Button>
                         </div>
                       </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {categoryName(r.category_id)}
+                      </TableCell>
                       <TableCell className="text-muted-foreground">
                         {r.financial_responsible ? (
                           r.financial_responsible_id ? (
@@ -718,15 +735,6 @@ function InadimplentesPage() {
                       <TableCell className="text-muted-foreground">{r.phone || "—"}</TableCell>
                       <TableCell className="text-center text-muted-foreground">
                         {r.due_day ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {r.is_gympass ? (
-                          <span className="inline-block rounded bg-purple-600 text-white text-[10px] font-semibold px-1.5 py-0.5">
-                            Gympass
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
-                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1.5">
