@@ -281,8 +281,11 @@ export function CourtBookingDialog({
   // Forma de pagamento / conta corrente / recebido POR JOGADOR quando o valor
   // é lançado para vários clientes. Sem ajuste, vale o padrão (campos gerais).
   const [playerPay, setPlayerPay] = useState<Record<string, Partial<PlayerPay>>>({});
+  // Aluguel quadra (avulso) não usa conta corrente: ou recebeu, ou fica
+  // pendente — e pendente vira débito do cliente (inadimplência) no banco.
+  const isAvulsoCat = isAvulsoCategoryName(categories.find((c) => c.id === categoryId)?.name ?? "");
   const payFor = (id: string): PlayerPay => {
-    const direction = playerPay[id]?.direction ?? payDirection;
+    const direction = isAvulsoCat ? "" : (playerPay[id]?.direction ?? payDirection);
     return {
       method: playerPay[id]?.method ?? payMethod,
       direction,
@@ -293,7 +296,8 @@ export function CourtBookingDialog({
   // Na quadra dividida, só vira lançamento quem tem algo marcado: forma de
   // pagamento, débito na conta ou recebido. Sem nada, não entra no caixa
   // (nada de "Pendente" pra quem não foi cobrado aqui).
-  const hasPaySetting = (p: PlayerPay) => p.direction !== "" || p.received || !!p.method;
+  // Aluguel quadra: todo jogador é lançado (quem não pagou fica devendo).
+  const hasPaySetting = (p: PlayerPay) => isAvulsoCat || p.direction !== "" || p.received || !!p.method;
   const patchPlayerPay = (id: string, patch: Partial<PlayerPay>) =>
     setPlayerPay((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
   useEffect(() => {
@@ -309,6 +313,11 @@ export function CourtBookingDialog({
   // O quadro de "lançar no caixa" fica oculto por padrão ao criar — evita
   // lançar no caixa de hoje uma locação marcada para outro dia.
   const [wantsPayment, setWantsPayment] = useState<boolean>(false);
+  useEffect(() => {
+    if (!isAvulsoCat) return;
+    if (payDirection) setPayDirection("");
+    if (payDirection2) setPayDirection2("");
+  }, [isAvulsoCat, payDirection, payDirection2]);
   // Tela de detalhes (view): lançar pagamento sem precisar entrar no modo
   // "Editar locação".
   const [viewWantsPayment, setViewWantsPayment] = useState<boolean>(false);
@@ -980,6 +989,23 @@ export function CourtBookingDialog({
       setSubmitting(false);
       toast.error("Selecione o professor da locação avulsa");
       return;
+    }
+
+    // Aluguel quadra para um dia que ainda não chegou: só com pagamento
+    // antecipado (lançado no caixa e marcado como recebido). Mensalista
+    // reserva normalmente.
+    if (isAvulsoCat && bookingDate > dateISOInRecife(new Date())) {
+      const players = Array.from(new Set([clientId, ...extraClientIds.filter(Boolean)]));
+      const allPaid =
+        wantsPayment &&
+        (payReceived || (players.length > 1 && players.every((id) => isFeeExempt(id) || payFor(id).received)));
+      if (!allPaid) {
+        setSubmitting(false);
+        toast.error(
+          "Aluguel quadra para outro dia só com pagamento antecipado: marque Lançar no caixa e Pagamento recebido.",
+        );
+        return;
+      }
     }
 
     // Conflito com horário fixo ainda ativo nesse dia/quadra/horário — ao
@@ -3623,6 +3649,7 @@ export function CourtBookingDialog({
                       </div>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-4">
+                      {!isAvulsoCat && (
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox
                           checked={payDirection === "debito"}
@@ -3633,6 +3660,7 @@ export function CourtBookingDialog({
                         />
                         Debitar da conta corrente
                       </label>
+                      )}
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox
                           disabled={payDirection === "debito"}
@@ -3666,6 +3694,7 @@ export function CourtBookingDialog({
                       viewPlayers.length > 1 &&
                       (viewIsDupla || splitDebit) && (
                         <PlayerPaymentRows
+noAccount={isAvulsoCat}
                           rows={(() => {
                             const total = parseMoneyInput(payAmount);
                             const parts = splitEvenly(total, viewPlayers.length);
@@ -4343,6 +4372,7 @@ export function CourtBookingDialog({
                       </div>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-4">
+                      {!isAvulsoCat && (
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox
                           checked={payDirection === "debito"}
@@ -4353,6 +4383,7 @@ export function CourtBookingDialog({
                         />
                         Debitar da conta corrente
                       </label>
+                      )}
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox
                           disabled={payDirection === "debito"}
@@ -4386,6 +4417,7 @@ export function CourtBookingDialog({
                       clientId &&
                       extraClientIds.some((id) => id && id !== clientId) && (
                         <PlayerPaymentRows
+noAccount={isAvulsoCat}
                           rows={(() => {
                             const ids = [
                               clientId,
@@ -4471,6 +4503,7 @@ export function CourtBookingDialog({
                           </div>
                         </div>
                         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-4">
+                          {!isAvulsoCat && (
                           <label className="flex items-center gap-2 text-sm">
                             <Checkbox
                               checked={payDirection2 === "debito"}
@@ -4481,6 +4514,7 @@ export function CourtBookingDialog({
                             />
                             Debitar da conta corrente
                           </label>
+                          )}
                           <label className="flex items-center gap-2 text-sm">
                             <Checkbox
                               disabled={payDirection2 === "debito"}
@@ -4555,17 +4589,22 @@ function PlayerPaymentRows({
   rows,
   resolve,
   onChange,
+  noAccount = false,
 }: {
   rows: { id: string; name: string; amount: React.ReactNode; exempt?: boolean }[];
   resolve: (id: string) => PlayerPay;
   onChange: (id: string, patch: Partial<PlayerPay>) => void;
+  /** Aluguel quadra: sem débito na conta — quem não recebeu fica devendo. */
+  noAccount?: boolean;
 }) {
   return (
     <div className="space-y-2 rounded-md border bg-background p-2">
       <div className="text-xs font-medium">Por jogador</div>
       <p className="text-[11px] text-muted-foreground">
-        Os campos acima são o padrão. Ajuste aqui quem paga de outro jeito. Quem ficar sem forma,
-        sem débito na conta e sem recebido não é lançado no caixa.
+        Os campos acima são o padrão. Ajuste aqui quem paga de outro jeito.{" "}
+        {noAccount
+          ? "Quem não ficar como Recebido fica pendente e entra como débito do cliente (inadimplência)."
+          : "Quem ficar sem forma, sem débito na conta e sem recebido não é lançado no caixa."}
       </p>
       {rows.map((r) => {
         const v = resolve(r.id);
@@ -4606,6 +4645,7 @@ function PlayerPaymentRows({
                   ))}
                 </SelectContent>
               </Select>
+              {!noAccount && (
               <label className="flex items-center gap-1.5 text-xs">
                 <Checkbox
                   checked={v.direction === "debito"}
@@ -4615,6 +4655,7 @@ function PlayerPaymentRows({
                 />
                 Débito na conta
               </label>
+              )}
               <label className="flex items-center gap-1.5 text-xs">
                 <Checkbox
                   disabled={v.direction === "debito"}
@@ -4790,6 +4831,7 @@ function EditBookingForm(props: {
   payReceived: boolean;
   setPayReceived: (v: boolean) => void;
 }) {
+  const avulsoCat = isAvulsoCategoryName(props.categories.find((c) => c.id === props.categoryId)?.name ?? "");
   return (
     <form onSubmit={props.onSubmit} className="space-y-4">
       <HourRange
@@ -4872,6 +4914,7 @@ function EditBookingForm(props: {
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-4">
+          {!avulsoCat && (
           <label className="flex items-center gap-2 text-sm">
             <Checkbox
               checked={props.payDirection === "debito"}
@@ -4882,6 +4925,7 @@ function EditBookingForm(props: {
             />
             Debitar da conta corrente
           </label>
+          )}
           <label className="flex items-center gap-2 text-sm">
             <Checkbox
               disabled={props.payDirection === "debito"}
