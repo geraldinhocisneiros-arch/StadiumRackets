@@ -765,7 +765,7 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
                       // C/C troca o débito por recebimento (o cliente pagou).
                       onCheckedChange={(v) =>
                         update(
-                          v === true && form.accountDirection === "debito"
+                          v === true && (form.accountDirection === "debito" || isAvulsoCategoryName(catNorm))
                             ? { received: true, accountDirection: "" }
                             : { received: v === true }
                         )
@@ -773,6 +773,8 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
                     />
                     <Label className="cursor-pointer font-normal">Pagamento recebido</Label>
                   </div>
+{!isAvulsoCategoryName(catNorm) && (
+<>
                   <div
                     className={`flex items-center gap-2 rounded-md border p-3 ${!eligible ? "opacity-50" : ""}`}
                   >
@@ -820,17 +822,20 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
                     />
                     <Label className="cursor-pointer font-normal text-center leading-tight">Debitar da<br />C/C</Label>
                   </div>
+</>
+)}
                 </div>
-                {!eligible && (
+                {!eligible && !isAvulsoCategoryName(catNorm) && (
                   <p className="text-xs text-muted-foreground">
                     Crédito/Débito em conta corrente disponível apenas para categorias{" "}
                     <strong>Mensalista</strong>, <strong>Débito avulso</strong> ou{" "}
                     <strong>Saldo anterior</strong>.
                   </p>
                 )}
-                {isAvulsoCategoryName(catNorm) && form.clientId && !form.received && (
-                  <p className="text-xs text-amber-600 dark:text-amber-400">
-                    Será lançado como débito na conta corrente do cliente até a quitação.
+                {isAvulsoCategoryName(catNorm) && (
+                  <p className={`text-xs ${form.clientId && !form.received ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                    Aluguel quadra: marque <strong>Pagamento recebido</strong> se o cliente pagou. Sem marcar, fica
+                  pendente e entra como débito do cliente (Inadimplentes) até ser recebido.
                   </p>
                 )}
               </div>

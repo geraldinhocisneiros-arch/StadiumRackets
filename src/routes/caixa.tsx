@@ -511,7 +511,9 @@ function CaixaPage() {
       const debtClientIds = Array.from(
         new Set(
           enriched
-            .filter((p) => p.client_id && p.account_direction === "debito" && !p.received)
+            // Débito na C/C ou lançamento pendente (ex.: Aluguel quadra não
+            // recebido, que vira débito do cliente). O banco diz se há dívida.
+            .filter((p) => p.client_id && !p.received && p.account_direction !== "credito")
             .map((p) => p.client_id as string),
         ),
       );
@@ -1329,17 +1331,45 @@ function CaixaPage() {
   // Cliente pagou um débito na conta: lança o crédito (quitação) com a forma
   // de pagamento real. A linha do débito continua como está — é o crédito
   // que zera a conta e que entra no caixa do dia.
+  // Aluguel quadra pendente (não é débito na C/C): o "Receber" quita a
+  // própria linha — vira recebida, com a forma e a data de hoje. Assim não
+  // existe um crédito separado que depois somaria em dobro se alguém
+  // marcasse a linha como recebida.
+  const isAvulsoPendingRow = (p: PaymentRow | null) =>
+    !!p &&
+    !p.received &&
+    p.account_direction !== "debito" &&
+    isAvulsoCategoryName(categories.find((c) => c.id === (p.category_id ?? p.clients?.category_id))?.name);
+
   const handleReceive = async () => {
     if (!receiveFor?.client_id) return;
     const amount = Math.round((Number(receiveAmount.replace(",", ".")) || 0) * 100) / 100;
     if (amount <= 0) return toast.error("Informe o valor recebido.");
     if (!receiveMethod) return toast.error("Escolha a forma de pagamento.");
+    const avulsoRow = isAvulsoPendingRow(receiveFor);
+    if (avulsoRow && Math.abs(amount - Number(receiveFor.amount)) > 0.005) {
+      return toast.error(
+        `Aluguel de quadra: receba o valor do lançamento (${fmtBRL(Number(receiveFor.amount))}). Para outro valor, edite o lançamento.`,
+      );
+    }
     setReceiving(true);
-    const { error } = await insertOpenDebtSettlement({
-      clientId: receiveFor.client_id,
-      amount,
-      method: receiveMethod,
-    });
+    const { error } = avulsoRow
+      ? await supabase
+          .from("payments")
+          .update({
+            received: true,
+            method: receiveMethod as never,
+            paid_at: new Date().toISOString(),
+            updated_by: user?.id ?? null,
+            updated_at: new Date().toISOString(),
+          } as never)
+          .eq("id", receiveFor.id)
+          .then(({ error: e }) => ({ error: e?.message ?? null }))
+      : await insertOpenDebtSettlement({
+          clientId: receiveFor.client_id,
+          amount,
+          method: receiveMethod,
+        });
     setReceiving(false);
     if (error) return toast.error(error);
     toast.success(`Recebido ${fmtBRL(amount)} de ${receiveFor.clients?.full_name ?? "cliente"}`);
@@ -2119,6 +2149,9 @@ function CaixaPage() {
           const cat = categories.find((c) => c.id === f.categoryId);
           const catNorm = normalizeCategoryName(cat?.name);
           const isEstornoAccount = catNorm === "estorno";
+          // Aluguel quadra: só "Pagamento recebido". Sem marcar, fica pendente
+          // e vira débito do cliente (Inadimplentes) até ser recebido.
+          const isAvulsoCat = isAvulsoCategoryName(catNorm);
           const hasClient = isCreate ? f.clientIds.length > 0 : !!f.clientId && f.clientId !== NEW_CLIENT_VALUE;
           const eligible =
             hasClient &&
@@ -2131,12 +2164,16 @@ function CaixaPage() {
                   title={f.accountDirection === "debito" ? "Débito na conta não é recebimento. Quando o cliente pagar, use \"Receber\" na linha do lançamento." : undefined}
                 >
                   <Checkbox
-                    disabled={isEstornoAccount || isAutoCC || f.accountDirection === "debito"}
+                    disabled={isEstornoAccount || isAutoCC || (f.accountDirection === "debito" && !isAvulsoCat)}
                     checked={!isEstornoAccount && !isAutoCC && f.accountDirection !== "debito" && f.received}
-                    onCheckedChange={(v) => update({ received: v === true })}
+                    onCheckedChange={(v) =>
+                      update(isAvulsoCat ? { received: v === true, accountDirection: "" } : { received: v === true })
+                    }
                   />
                   <Label className="cursor-pointer font-normal">Pagamento recebido</Label>
                 </div>
+{!isAvulsoCat && (
+<>
                 <div
                   className={`flex items-center gap-2 rounded-md border p-3 ${!eligible || (isAutoCC && fCatNorm !== "credito gympass") ? "opacity-50" : ""}`}
                 >
@@ -2194,6 +2231,8 @@ function CaixaPage() {
                   />
                   <Label className="cursor-pointer font-normal text-center leading-tight">Debitar da<br />C/C</Label>
                 </div>
+</>
+)}
               </div>
               {f.accountDirection === "debito" && (
                 <p className="text-xs text-muted-foreground">
@@ -2201,7 +2240,13 @@ function CaixaPage() {
                   pagar, use o botão <strong>Receber</strong> na linha do lançamento.
                 </p>
               )}
-              {!eligible && (
+              {isAvulsoCat && (
+                <p className={`text-xs ${hasClient && !f.received ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                  Aluguel quadra: marque <strong>Pagamento recebido</strong> se o cliente pagou. Sem marcar, fica
+                  pendente e entra como débito do cliente (Inadimplentes) até ser recebido.
+                </p>
+              )}
+              {!eligible && !isAvulsoCat && (
                 <p className="text-xs text-muted-foreground">
                   Crédito/Débito em conta corrente disponível apenas para categorias <strong>Mensalista</strong>, <strong>Débito avulso</strong> ou <strong>Saldo anterior</strong>.
                 </p>
@@ -2636,8 +2681,12 @@ function CaixaPage() {
                             </Button>
                           )}
                           {p.client_id &&
-                            p.account_direction === "debito" &&
                             !p.received &&
+                            (p.account_direction === "debito" ||
+                              (!p.to_account &&
+                                isAvulsoCategoryName(
+                                  categories.find((c) => c.id === (p.category_id ?? p.clients?.category_id))?.name,
+                                ))) &&
                             (openDebtByClient[p.client_id] ?? 0) > 0 && (
                               <Button
                                 size="icon"
@@ -2726,7 +2775,10 @@ function CaixaPage() {
               <p className="text-sm text-muted-foreground">
                 {receiveFor.clients?.full_name ?? "Cliente"} tem{" "}
                 <strong>{fmtBRL(openDebtByClient[receiveFor.client_id ?? ""] ?? 0)}</strong> em aberto
-                na conta. O valor recebido entra como crédito na conta e no caixa de hoje.
+                na conta.{" "}
+                {isAvulsoPendingRow(receiveFor)
+                  ? "Este aluguel de quadra passa a Recebido e entra no caixa de hoje."
+                  : "O valor recebido entra como crédito na conta e no caixa de hoje."}
               </p>
               <div className="space-y-1">
                 <Label>Valor recebido (R$)</Label>
