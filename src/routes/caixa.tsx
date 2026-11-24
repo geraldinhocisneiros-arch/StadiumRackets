@@ -2540,9 +2540,14 @@ function CaixaPage() {
                           (catName === "mensalista" || catName === "credito gympass" || catName === "estorno") &&
                           p.to_account === true &&
                           p.account_direction === "credito";
+                        // Qualquer pagamento efetivamente recebido (avulso,
+                        // locação de quadra, mensalidade paga na hora etc.)
+                        // também fica azul. Débito na C/C continua vermelho.
+                        const isRecebido =
+                          p.received === true && p.account_direction !== "debito";
                         const colorClass = isDebitMensalista
                           ? "text-destructive"
-                          : isCreditMensalistaOuGympass
+                          : isCreditMensalistaOuGympass || isRecebido
                           ? "text-blue-600 dark:text-blue-400"
                           : "";
                         return (
