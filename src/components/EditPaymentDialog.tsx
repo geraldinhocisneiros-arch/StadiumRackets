@@ -759,9 +759,17 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className={`flex items-center gap-2 rounded-md border p-3 ${isEstorno || isAutoCC ? "opacity-50" : ""}`}>
                     <Checkbox
-                      disabled={isEstorno || isAutoCC || form.accountDirection === "debito"}
+                      disabled={isEstorno || isAutoCC}
                       checked={form.accountDirection !== "debito" && form.received}
-                      onCheckedChange={(v) => update({ received: v === true })}
+                      // Marcar "recebido" num lançamento que estava como débito na
+                      // C/C troca o débito por recebimento (o cliente pagou).
+                      onCheckedChange={(v) =>
+                        update(
+                          v === true && form.accountDirection === "debito"
+                            ? { received: true, accountDirection: "" }
+                            : { received: v === true }
+                        )
+                      }
                     />
                     <Label className="cursor-pointer font-normal">Pagamento recebido</Label>
                   </div>
@@ -799,10 +807,12 @@ export function EditPaymentDialog({ paymentId, open, onOpenChange, onSaved }: Ed
                     <CreditConfirmDialog request={creditAsk} onClose={() => setCreditAsk(null)} />
                   </div>
                   <div
-                    className={`flex items-center gap-2 rounded-md border p-3 ${!eligible || isAutoCC || isEstorno ? "opacity-50" : ""}`}
+                    className={`flex items-center gap-2 rounded-md border p-3 ${(!eligible && form.accountDirection !== "debito") || isAutoCC || isEstorno ? "opacity-50" : ""}`}
                   >
                     <Checkbox
-                      disabled={!eligible || isAutoCC || isEstorno}
+                      // Débito já gravado (ex.: vindo do mapa numa categoria sem C/C)
+                      // continua desmarcável, senão o lançamento fica travado.
+                      disabled={(!eligible && form.accountDirection !== "debito") || isAutoCC || isEstorno}
                       checked={form.accountDirection === "debito"}
                       onCheckedChange={(v) =>
                         update(v === true ? { accountDirection: "debito", received: false } : { accountDirection: "" })
