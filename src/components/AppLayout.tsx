@@ -19,6 +19,7 @@ import {
   Sparkles,
   DollarSign,
   Package,
+  Store,
   FileText,
   GraduationCap,
   ArrowUp,
@@ -33,6 +34,7 @@ import {
   ChevronDown,
   Settings,
   Repeat,
+  MessageCircle,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "@/hooks/useAuth";
@@ -65,6 +67,12 @@ const NAV: NavItem[] = [
     to: "/vagas-fixas",
     label: "Vagas para fixo",
     icon: Repeat,
+    rolesAllowed: ["admin", "diretoria", "recepcionista"],
+  },
+  {
+    to: "/turmas",
+    label: "Turmas pickleball",
+    icon: Users,
     rolesAllowed: ["admin", "diretoria", "recepcionista"],
   },
   { to: "/financas", label: "Finanças", icon: Wallet, pageKey: "financas" },
@@ -106,6 +114,12 @@ const NAV: NavItem[] = [
     icon: ShieldCheck,
     rolesAllowed: ["admin", "diretoria", "recepcionista"],
   },
+  {
+    to: "/whatsapp",
+    label: "Envio WhatsApp",
+    icon: MessageCircle,
+    rolesAllowed: ["admin", "diretoria", "recepcionista"],
+  },
   { to: "/clientes", label: "Clientes", icon: Users, pageKey: "clientes" },
   { to: "/fat-quadra", label: "Fat. quadra", icon: LandPlot, rolesAllowed: ["diretoria"] },
   { to: "/categorias", label: "Categorias", icon: Tags, pageKey: "categorias" },
@@ -118,7 +132,7 @@ const NAV: NavItem[] = [
   { to: "/relatorios", label: "Relatórios", icon: BarChart3, rolesAllowed: ["diretoria"] },
   { to: "/inteligencia", label: "Inteligência", icon: Lightbulb, rolesAllowed: ["diretoria"] },
   { to: "/usuarios", label: "Usuários", icon: UserCog, pageKey: "usuarios" },
-  { to: "/estoque", label: "Estoque", icon: Package, pageKey: "estoque" },
+  { to: "/estoque", label: "Lojinha", icon: Store, pageKey: "estoque" },
   { to: "/limpeza", label: "Limpeza", icon: Sparkles, rolesAllowed: ["diretoria", "limpeza"] },
   {
     to: "/professores",
@@ -131,6 +145,12 @@ const NAV: NavItem[] = [
     label: "Relatório professor",
     icon: GraduationCap,
     rolesAllowed: ["diretoria", "recepcionista"],
+  },
+  {
+    to: "/comissao-johny",
+    label: "Comissão Johny",
+    icon: GraduationCap,
+    rolesAllowed: ["admin", "diretoria"],
   },
   {
     to: "/professores/vinculos",
@@ -188,6 +208,7 @@ const NAV_GROUPS: Array<{
     children: [
       "/professores",
       "/professores/relatorio",
+      "/comissao-johny",
       "/professores/vinculos",
       "/vinculos-professor",
       "/trocas-cliente",

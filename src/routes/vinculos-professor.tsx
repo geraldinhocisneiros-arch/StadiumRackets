@@ -184,7 +184,10 @@ function VinculosProfessorPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => setRejecting(r)}
+                            onClick={() => {
+                              setRejectReason("");
+                              setRejecting(r);
+                            }}
                             disabled={busy === r.id}
                           >
                             <X className="h-4 w-4 mr-1" />

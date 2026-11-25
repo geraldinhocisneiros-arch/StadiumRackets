@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fmtBRL, monthStartISO, monthEndISO, dayStartISO, dayEndExclusiveISO } from "@/lib/format";
 import { TrendingUp, AlertCircle, UserX } from "lucide-react";
-import { isNonRevenueCategory } from "@/lib/category";
+import { isNonRevenueCategory, registerLojinhaCategories } from "@/lib/category";
 import { fetchAll, runWithConcurrency } from "@/lib/fetchAll";
 import { toast } from "sonner";
 import {
@@ -89,7 +89,7 @@ function DashboardPage() {
 
       const [paymentsAll, catsRes, clientsAll, entriesAll] = await Promise.all([
         fetchAllPayments(),
-        supabase.from("client_categories").select("id, name"),
+        supabase.from("client_categories").select("id, name, stock_item_id"),
         fetchAll<{ id: string; active: boolean }>("clients", "id, active"),
         fetchAll<{ client_id: string; entry_type: string; amount: number }>(
           "account_entries",
@@ -97,6 +97,7 @@ function DashboardPage() {
         ),
       ]);
 
+      registerLojinhaCategories(catsRes.data);
       const catNameMap = new Map<string, string>();
       (catsRes.data ?? []).forEach((c: any) => catNameMap.set(c.id, c.name));
 

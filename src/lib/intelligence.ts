@@ -16,8 +16,7 @@ import {
   isEmployeeCategoryName,
   isNonRevenueCategory,
   isSaldoAnterior,
-  normalizeCategoryName,
-} from "@/lib/category";
+  normalizeCategoryName, isAvulsoCategoryName } from "@/lib/category";
 import { findHoliday } from "@/lib/holidays";
 import { COURTS, courtShort } from "@/lib/court-map";
 
@@ -276,7 +275,7 @@ export class IntelContext {
     data.categories.forEach((c) => this.catName.set(c.id, c.name));
     data.clients.forEach((c) => this.clientById.set(c.id, c));
     this.avulsoCategoryId =
-      data.categories.find((c) => normalizeCategoryName(c.name) === "avulso")?.id ?? null;
+      data.categories.find((c) => isAvulsoCategoryName(c.name))?.id ?? null;
   }
 
   paymentCategory(p: IntelPayment): string {

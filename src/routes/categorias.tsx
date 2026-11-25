@@ -101,7 +101,7 @@ function CategoriasPage() {
               <Plus className="h-4 w-4 mr-2" /> Nova categoria
             </Button>
           </DialogTrigger>
-          <CategoryDialog editing={editing} onSaved={load} onClose={() => setOpen(false)} />
+          <CategoryDialog open={open} editing={editing} onSaved={load} onClose={() => setOpen(false)} />
         </Dialog>
       </div>
 
@@ -240,10 +240,12 @@ function CategoryColorPicker({
 }
 
 function CategoryDialog({
+  open,
   editing,
   onSaved,
   onClose,
 }: {
+  open: boolean;
   editing: Category | null;
   onSaved: () => void;
   onClose: () => void;
@@ -254,12 +256,13 @@ function CategoryDialog({
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    if (!open) return;
     setName(editing?.name ?? "");
     setDescription(editing?.description ?? "");
     setCommissionPercent(
       editing?.commission_percent != null ? String(editing.commission_percent) : ""
     );
-  }, [editing]);
+  }, [editing, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -44,7 +44,7 @@ interface Row {
   differences: Record<string, number>;
   pending_resolved: ClosingRecord["pending_resolved"];
   stock_report: ClosingRecord["stock_report"];
-  remotes_report: ClosingRecord["remotes_report"];
+  remotes_report?: ClosingRecord["remotes_report"];
   notes: string | null;
   closed_by_name: string | null;
 }
@@ -66,7 +66,7 @@ function FechamentosPage() {
       const { data, error } = await supabase
         .from("cash_closings")
         .select(
-          "id, closing_date, closed_at, closed_by, cash_user_id, totals_system, totals_counted, differences, pending_resolved, stock_report, remotes_report, notes",
+          "id, closing_date, closed_at, closed_by, cash_user_id, totals_system, totals_counted, differences, pending_resolved, stock_report, notes",
         )
         .order("closed_at", { ascending: false })
         .limit(500);
@@ -77,13 +77,16 @@ function FechamentosPage() {
       if (ids.length) {
         const { data: profs } = await supabase
           .from("profiles")
-          .select("id, full_name")
+          .select("id, full_name, email")
           .in("id", ids);
-        nameMap = Object.fromEntries((profs ?? []).map((p) => [p.id, p.full_name ?? ""]));
+        nameMap = Object.fromEntries(
+          (profs ?? []).map((p) => [p.id, p.full_name?.trim() || p.email || "Usuário sem nome"]),
+        );
       }
       setRows(list.map((r) => ({ ...r, closed_by_name: nameMap[r.closed_by] ?? null })));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao carregar fechamentos.");
+      const msg = (e as { message?: string })?.message;
+      toast.error(msg ? `Erro ao carregar fechamentos: ${msg}` : "Erro ao carregar fechamentos.");
     } finally {
       setLoading(false);
     }

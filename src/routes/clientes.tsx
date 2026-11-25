@@ -29,6 +29,8 @@ import { fetchAll } from "@/lib/fetchAll";
 import { MonthEndProjectionButton } from "@/components/MonthEndProjectionButton";
 import { useServerFn } from "@tanstack/react-start";
 import { deleteClientAccount } from "@/lib/users.functions";
+import { CategoryTabs } from "@/components/CategoryTabs";
+import { fetchDuplicateCandidates, findSimilarClients } from "@/lib/client-duplicates";
 
 export const Route = createFileRoute("/clientes")({
   component: () => (
@@ -47,7 +49,6 @@ interface Client {
   active: boolean;
   category_id: string | null;
   financial_responsible: string | null;
-  is_gympass: boolean;
   notes: string | null;
   default_discount_percent: number | null;
   teacher_id: string | null;
@@ -76,7 +77,6 @@ function ClientesPage() {
   const [search, setSearch] = useUrlState<string>("q", "");
   const [showInactive, setShowInactive] = useUrlState<boolean>("inactive", false);
   const [balanceFilter, setBalanceFilter] = useUrlState<"all" | "credit" | "low_credit" | "debit">("balance", "all");
-  const [gympassFilter, setGympassFilter] = useUrlState<"all" | "gympass" | "non_gympass">("gympass", "all");
   const [categoryFilter, setCategoryFilter] = useUrlState<string>("cat", "all");
   const [letterFrom, setLetterFrom] = useUrlState<string>("letterFrom", "all");
   const [letterTo, setLetterTo] = useUrlState<string>("letterTo", "all");
@@ -86,7 +86,7 @@ function ClientesPage() {
     const [cli, { data: cats }] = await Promise.all([
       fetchAll<Client>(
         "clients",
-        "id, full_name, phone, email, due_day, active, category_id, financial_responsible, is_gympass, notes, default_discount_percent, teacher_id, custom_amount",
+        "id, full_name, phone, email, due_day, active, category_id, financial_responsible, notes, default_discount_percent, teacher_id, custom_amount",
       ),
       supabase.from("client_categories").select("id, name").order("name"),
     ]);
@@ -130,9 +130,6 @@ function ClientesPage() {
         (balanceFilter === "credit" && c.balance > 0) ||
         (balanceFilter === "low_credit" && c.balance > 0 && c.balance <= 250) ||
         (balanceFilter === "debit" && c.balance < 0)) &&
-      (gympassFilter === "all" ||
-        (gympassFilter === "gympass" && c.is_gympass) ||
-        (gympassFilter === "non_gympass" && !c.is_gympass)) &&
       (categoryFilter === "all" ||
         (categoryFilter === "none" && !c.category_id) ||
         c.category_id === categoryFilter) &&
@@ -158,6 +155,29 @@ function ClientesPage() {
 
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
+  const categoryName = (id: string | null) =>
+    id ? (categoryList.find((c) => c.id === id)?.name ?? "—") : "—";
+
+  // Base das abas: respeita só o "Mostrar inativos", pra contagem de cada
+  // categoria não mudar conforme a busca ou o filtro de saldo.
+  const tabBase = clients.filter((c) => showInactive || c.active);
+
+  // Resumo da lista filtrada (ex.: aba "Escolinha Pickleball"): quem está em
+  // dia, quem deve e quanto. "Em dia" = saldo da conta >= 0.
+  const summary = filtered.reduce(
+    (acc, c) => {
+      if (c.balance < 0) {
+        acc.debtCount += 1;
+        acc.debtTotal += c.balance;
+      } else {
+        acc.okCount += 1;
+      }
+      if (c.balance > 0) acc.creditTotal += c.balance;
+      return acc;
+    },
+    { okCount: 0, debtCount: 0, debtTotal: 0, creditTotal: 0 },
+  );
+
   const handlePrint = () => {
     const now = new Date().toLocaleString("pt-BR");
     const filterDesc: string[] = [];
@@ -165,8 +185,6 @@ function ClientesPage() {
     if (balanceFilter === "credit") filterDesc.push("Com crédito");
     else if (balanceFilter === "low_credit") filterDesc.push("Crédito ≤ R$ 250");
     else if (balanceFilter === "debit") filterDesc.push("Com débito");
-    if (gympassFilter === "gympass") filterDesc.push("Apenas Gympass");
-    else if (gympassFilter === "non_gympass") filterDesc.push("Sem Gympass");
     if (categoryFilter !== "all") {
       const catName = categoryFilter === "none"
         ? "Sem categoria"
@@ -192,9 +210,9 @@ function ClientesPage() {
       const balanceColor = isDebt ? "color:#b91c1c;font-weight:600;" : c.balance > 0 ? "color:#15803d;font-weight:600;" : "color:#6b7280;";
       return `<tr ${rowStyle}>
         <td>${escapeHtml(c.full_name)}</td>
+        <td>${escapeHtml(categoryName(c.category_id))}</td>
         <td>${escapeHtml(c.phone ?? "—")}</td>
         <td>${c.due_day ? `Dia ${c.due_day}` : "—"}</td>
-        <td style="text-align:center;">${c.is_gympass ? "Sim" : "—"}</td>
         <td style="text-align:right;${balanceColor}">${fmtBRL(c.balance)}</td>
         <td>${c.active ? "Ativo" : "Inativo"}</td>
       </tr>`;
@@ -214,9 +232,10 @@ function ClientesPage() {
 </style></head><body>
   <h1>Lista de Clientes</h1>
   <div class="meta">Gerado em ${now} • ${filtered.length} ${filtered.length === 1 ? "cliente" : "clientes"}${filterDesc.length ? " • " + filterDesc.join(" • ") : ""}</div>
+  <div class="total">Em dia: <strong>${summary.okCount}</strong> • Devendo: <strong>${summary.debtCount}</strong> (${fmtBRL(summary.debtTotal)})</div>
   ${showCreditTotal ? `<div class="total"><strong>Total de crédito:</strong> ${fmtBRL(totalCredit)}</div>` : ""}
   <table>
-    <thead><tr><th>Nome</th><th>Telefone</th><th>Vencimento</th><th style="text-align:center">Gympass</th><th style="text-align:right">Saldo</th><th>Status</th></tr></thead>
+    <thead><tr><th>Nome</th><th>Categoria</th><th>Telefone</th><th>Vencimento</th><th style="text-align:right">Saldo</th><th>Status</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
   <script>window.onload=()=>{window.print();}</script>
@@ -258,7 +277,13 @@ function ClientesPage() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="space-y-4">
+          <CategoryTabs
+            categories={categoryList}
+            items={tabBase}
+            value={categoryFilter}
+            onChange={setCategoryFilter}
+          />
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <Input
               placeholder="Buscar por nome..."
@@ -304,30 +329,6 @@ function ClientesPage() {
                   <SelectItem value="debit">Com débito</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={gympassFilter} onValueChange={(v) => setGympassFilter(v as "all" | "gympass" | "non_gympass")}>
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue placeholder="Gympass" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="gympass">Apenas Gympass</SelectItem>
-                  <SelectItem value="non_gympass">Sem Gympass</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Categoria" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as categorias</SelectItem>
-                  <SelectItem value="none">Sem categoria</SelectItem>
-                  {categoryList.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               <div className="flex items-center gap-2">
                 <Switch id="inactive" checked={showInactive} onCheckedChange={setShowInactive} />
                 <Label htmlFor="inactive" className="cursor-pointer">
@@ -354,6 +355,31 @@ function ClientesPage() {
                   </Button>
                 </div>
               )}
+              {!loading && filtered.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-x-6 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                  <span>
+                    <span className="text-muted-foreground">
+                      {categoryFilter === "all" ? "Clientes" : categoryFilter === "none" ? "Sem categoria" : categoryName(categoryFilter)}:
+                    </span>{" "}
+                    <strong>{filtered.length}</strong>
+                  </span>
+                  <span>
+                    <span className="text-muted-foreground">Em dia:</span>{" "}
+                    <strong className="text-success">{summary.okCount}</strong>
+                  </span>
+                  <span>
+                    <span className="text-muted-foreground">Devendo:</span>{" "}
+                    <strong className="text-destructive">{summary.debtCount}</strong>
+                    {summary.debtCount > 0 && (
+                      <span className="text-destructive"> ({fmtBRL(summary.debtTotal)})</span>
+                    )}
+                  </span>
+                  <span>
+                    <span className="text-muted-foreground">Crédito em conta:</span>{" "}
+                    <strong>{fmtBRL(summary.creditTotal)}</strong>
+                  </span>
+                </div>
+              )}
               {(balanceFilter === "credit" || balanceFilter === "low_credit") && (
                 <div className="mb-3 text-sm text-muted-foreground">
                   Total de crédito ({filtered.length} {filtered.length === 1 ? "cliente" : "clientes"}):{" "}
@@ -366,9 +392,9 @@ function ClientesPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nome</TableHead>
+                    <TableHead>Categoria</TableHead>
                     <TableHead>Telefone</TableHead>
                     <TableHead>Vencimento</TableHead>
-                    <TableHead className="text-center">Gympass</TableHead>
                     <TableHead className="text-right">Saldo</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead></TableHead>
@@ -403,15 +429,9 @@ function ClientesPage() {
                             {c.full_name}
                           </Link>
                         </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{categoryName(c.category_id)}</TableCell>
                         <TableCell className="text-sm">{c.phone ?? "—"}</TableCell>
                         <TableCell>{c.due_day ? `Dia ${c.due_day}` : "—"}</TableCell>
-                        <TableCell className="text-center">
-                          {c.is_gympass ? (
-                            <Badge className="bg-purple-600 hover:bg-purple-600 text-white">Gympass</Badge>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">—</span>
-                          )}
-                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             <span
@@ -527,7 +547,6 @@ export function ClientDialog({
   const [active, setActive] = useState(true);
   const [categoryId, setCategoryId] = useState<string>("none");
   const [financialResponsible, setFinancialResponsible] = useState("");
-  const [isGympass, setIsGympass] = useState(false);
   const [notes, setNotes] = useState("");
   const [defaultDiscountPercent, setDefaultDiscountPercent] = useState("");
   const [customAmount, setCustomAmount] = useState("");
@@ -556,7 +575,6 @@ export function ClientDialog({
       setActive(editing?.active ?? true);
       setCategoryId(editing?.category_id ?? "none");
       setFinancialResponsible(editing?.financial_responsible ?? "");
-      setIsGympass(editing?.is_gympass ?? false);
       setNotes(editing?.notes ?? "");
       setDefaultDiscountPercent(
         editing?.default_discount_percent && editing.default_discount_percent > 0
@@ -622,56 +640,28 @@ export function ClientDialog({
     }
   }, [open, editing]);
 
-  // Auto-preenche 10% de desconto padrão quando a categoria selecionada é "mensalista"
-  // e o campo ainda está vazio. Assim ao criar novo cliente ou trocar para mensalista
-  // no cadastro, o desconto já vem sugerido (pode ser ajustado manualmente).
-  useEffect(() => {
-    if (!open) return;
-    if (categoryId === "none" || !categories.length) return;
-    const cat = categories.find((c) => c.id === categoryId);
-    const norm = (cat?.name ?? "")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .trim();
-    if (norm === "mensalista" && defaultDiscountPercent.trim() === "") {
-      setDefaultDiscountPercent("10");
-    }
-  }, [categoryId, categories, open, defaultDiscountPercent]);
-
   const handleSubmit = async (e: React.FormEvent, force = false) => {
     e.preventDefault();
     setSubmitting(true);
 
     const trimmedName = name.trim();
     const trimmedPhone = phone.trim();
-    const phoneDigits = trimmedPhone.replace(/\D/g, "");
-    const normName = normalizeText(trimmedName);
+    // Na edição, só checa duplicado se nome ou telefone mudaram — senão um
+    // par parecido já conhecido avisaria a cada salvamento.
+    const identityChanged =
+      !editing ||
+      trimmedName !== (editing.full_name ?? "").trim() ||
+      trimmedPhone !== (editing.phone ?? "").trim();
 
     // Duplicate check (skip when forced confirmation)
-    if (!force) {
-      const existing = await fetchAll<{ id: string; full_name: string; phone: string | null }>(
-        "clients",
-        "id, full_name, phone",
-      );
-
-      const dupes: string[] = [];
-      existing.forEach((c) => {
-        if (editing && c.id === editing.id) return;
-        if (normName && normalizeText(c.full_name) === normName) {
-          dupes.push(`Nome igual: "${c.full_name}"`);
-          return;
-        }
-        const otherDigits = (c.phone ?? "").replace(/\D/g, "");
-        if (phoneDigits && otherDigits && phoneDigits === otherDigits) {
-          dupes.push(`Telefone igual ao de "${c.full_name}" (${c.phone})`);
-        }
-      });
+    if (!force && identityChanged) {
+      const existing = await fetchDuplicateCandidates();
+      const dupes = findSimilarClients(existing, trimmedName, trimmedPhone, editing?.id);
 
       if (dupes.length > 0) {
         setSubmitting(false);
         const ok = await confirm(
-          `Já existe cadastro similar:\n\n${dupes.join("\n")}\n\nDeseja cadastrar mesmo assim?`
+          `Já existe cadastro parecido:\n\n${dupes.join("\n")}\n\nConfira se não é a mesma pessoa antes de continuar — cadastro duplicado separa reservas e débitos do cliente. Deseja salvar mesmo assim?`
         );
         if (!ok) return;
         // Re-run forced
@@ -687,7 +677,6 @@ export function ClientDialog({
       active,
       category_id: categoryId === "none" ? null : categoryId,
       financial_responsible: financialResponsible.trim() || null,
-      is_gympass: isGympass,
       notes: notes.trim() || null,
       default_discount_percent: Math.min(Math.max(Number(defaultDiscountPercent) || 0, 0), 100),
       custom_amount: customAmount.trim() === "" ? null : Number(customAmount) || 0,
@@ -932,12 +921,6 @@ export function ClientDialog({
               Sobrescreve o valor padrão da categoria nos lançamentos deste cliente — usado, por
               exemplo, para o valor de mensalista sugerido no Caixa.
             </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Switch id="gympass" checked={isGympass} onCheckedChange={setIsGympass} />
-            <Label htmlFor="gympass" className="cursor-pointer">
-              Gympass
-            </Label>
           </div>
           <div className="flex items-center gap-2">
             <Switch id="active" checked={active} onCheckedChange={setActive} />

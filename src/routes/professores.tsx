@@ -113,7 +113,7 @@ function ProfessoresPage() {
               <Plus className="h-4 w-4 mr-2" /> Novo professor
             </Button>
           </DialogTrigger>
-          <TeacherDialog editing={editing} onSaved={load} onClose={() => setOpen(false)} />
+          <TeacherDialog open={open} editing={editing} onSaved={load} onClose={() => setOpen(false)} />
         </Dialog>
       </div>
 
@@ -206,10 +206,12 @@ function ProfessoresPage() {
 }
 
 function TeacherDialog({
+  open,
   editing,
   onSaved,
   onClose,
 }: {
+  open: boolean;
   editing: Teacher | null;
   onSaved: () => void;
   onClose: () => void;
@@ -222,11 +224,12 @@ function TeacherDialog({
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    if (!open) return;
     setName(editing?.name ?? "");
     setPhone(editing?.phone ?? "");
     setActive(editing?.active ?? true);
     setCancelAnyTennis(editing?.can_cancel_any_tennis ?? false);
-  }, [editing]);
+  }, [editing, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

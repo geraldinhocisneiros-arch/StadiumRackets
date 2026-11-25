@@ -14,6 +14,7 @@ import { Route as CaixaRouteImport } from './routes/caixa'
 import { Route as CategoriasRouteImport } from './routes/categorias'
 import { Route as ClienteRouteImport } from './routes/cliente'
 import { Route as ClientesRouteImport } from './routes/clientes'
+import { Route as ComissaoJohnyRouteImport } from './routes/comissao-johny'
 import { Route as EsperaRouteImport } from './routes/espera'
 import { Route as EstoqueRouteImport } from './routes/estoque'
 import { Route as FatQuadraRouteImport } from './routes/fat-quadra'
@@ -37,9 +38,11 @@ import { Route as SetupRouteImport } from './routes/setup'
 import { Route as TarefasRouteImport } from './routes/tarefas'
 import { Route as TrocasClienteRouteImport } from './routes/trocas-cliente'
 import { Route as TrustRouteImport } from './routes/trust'
+import { Route as TurmasRouteImport } from './routes/turmas'
 import { Route as UsuariosRouteImport } from './routes/usuarios'
 import { Route as VagasFixasRouteImport } from './routes/vagas-fixas'
 import { Route as VinculosProfessorRouteImport } from './routes/vinculos-professor'
+import { Route as WhatsappRouteImport } from './routes/whatsapp'
 import { Route as ClientesClientIdRouteImport } from './routes/clientes.$clientId'
 import { Route as ClientesLimiteDebitoRouteImport } from './routes/clientes.limite-debito'
 import { Route as MapaTvRouteImport } from './routes/mapa.tv'
@@ -81,6 +84,11 @@ const ClienteRoute = ClienteRouteImport.update({
 const ClientesRoute = ClientesRouteImport.update({
   id: '/clientes',
   path: '/clientes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComissaoJohnyRoute = ComissaoJohnyRouteImport.update({
+  id: '/comissao-johny',
+  path: '/comissao-johny',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EsperaRoute = EsperaRouteImport.update({
@@ -198,6 +206,11 @@ const TrustRoute = TrustRouteImport.update({
   path: '/trust',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TurmasRoute = TurmasRouteImport.update({
+  id: '/turmas',
+  path: '/turmas',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const UsuariosRoute = UsuariosRouteImport.update({
   id: '/usuarios',
   path: '/usuarios',
@@ -211,6 +224,11 @@ const VagasFixasRoute = VagasFixasRouteImport.update({
 const VinculosProfessorRoute = VinculosProfessorRouteImport.update({
   id: '/vinculos-professor',
   path: '/vinculos-professor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WhatsappRoute = WhatsappRouteImport.update({
+  id: '/whatsapp',
+  path: '/whatsapp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClientesClientIdRoute = ClientesClientIdRouteImport.update({
@@ -307,6 +325,7 @@ export interface FileRoutesByFullPath {
   '/categorias': typeof CategoriasRoute
   '/cliente': typeof ClienteRoute
   '/clientes': typeof ClientesRouteWithChildren
+  '/comissao-johny': typeof ComissaoJohnyRoute
   '/espera': typeof EsperaRoute
   '/estoque': typeof EstoqueRoute
   '/fat-quadra': typeof FatQuadraRoute
@@ -330,9 +349,11 @@ export interface FileRoutesByFullPath {
   '/tarefas': typeof TarefasRoute
   '/trocas-cliente': typeof TrocasClienteRoute
   '/trust': typeof TrustRoute
+  '/turmas': typeof TurmasRoute
   '/usuarios': typeof UsuariosRoute
   '/vagas-fixas': typeof VagasFixasRoute
   '/vinculos-professor': typeof VinculosProfessorRoute
+  '/whatsapp': typeof WhatsappRoute
   '/clientes/$clientId': typeof ClientesClientIdRoute
   '/clientes/limite-debito': typeof ClientesLimiteDebitoRoute
   '/mapa/tv': typeof MapaTvRoute
@@ -357,6 +378,7 @@ export interface FileRoutesByTo {
   '/categorias': typeof CategoriasRoute
   '/cliente': typeof ClienteRoute
   '/clientes': typeof ClientesRouteWithChildren
+  '/comissao-johny': typeof ComissaoJohnyRoute
   '/espera': typeof EsperaRoute
   '/estoque': typeof EstoqueRoute
   '/fat-quadra': typeof FatQuadraRoute
@@ -379,9 +401,11 @@ export interface FileRoutesByTo {
   '/tarefas': typeof TarefasRoute
   '/trocas-cliente': typeof TrocasClienteRoute
   '/trust': typeof TrustRoute
+  '/turmas': typeof TurmasRoute
   '/usuarios': typeof UsuariosRoute
   '/vagas-fixas': typeof VagasFixasRoute
   '/vinculos-professor': typeof VinculosProfessorRoute
+  '/whatsapp': typeof WhatsappRoute
   '/clientes/$clientId': typeof ClientesClientIdRoute
   '/clientes/limite-debito': typeof ClientesLimiteDebitoRoute
   '/mapa/tv': typeof MapaTvRoute
@@ -407,6 +431,7 @@ export interface FileRoutesById {
   '/categorias': typeof CategoriasRoute
   '/cliente': typeof ClienteRoute
   '/clientes': typeof ClientesRouteWithChildren
+  '/comissao-johny': typeof ComissaoJohnyRoute
   '/espera': typeof EsperaRoute
   '/estoque': typeof EstoqueRoute
   '/fat-quadra': typeof FatQuadraRoute
@@ -430,9 +455,11 @@ export interface FileRoutesById {
   '/tarefas': typeof TarefasRoute
   '/trocas-cliente': typeof TrocasClienteRoute
   '/trust': typeof TrustRoute
+  '/turmas': typeof TurmasRoute
   '/usuarios': typeof UsuariosRoute
   '/vagas-fixas': typeof VagasFixasRoute
   '/vinculos-professor': typeof VinculosProfessorRoute
+  '/whatsapp': typeof WhatsappRoute
   '/clientes/$clientId': typeof ClientesClientIdRoute
   '/clientes/limite-debito': typeof ClientesLimiteDebitoRoute
   '/mapa/tv': typeof MapaTvRoute
@@ -459,6 +486,7 @@ export interface FileRouteTypes {
     | '/categorias'
     | '/cliente'
     | '/clientes'
+    | '/comissao-johny'
     | '/espera'
     | '/estoque'
     | '/fat-quadra'
@@ -482,9 +510,11 @@ export interface FileRouteTypes {
     | '/tarefas'
     | '/trocas-cliente'
     | '/trust'
+    | '/turmas'
     | '/usuarios'
     | '/vagas-fixas'
     | '/vinculos-professor'
+    | '/whatsapp'
     | '/clientes/$clientId'
     | '/clientes/limite-debito'
     | '/mapa/tv'
@@ -509,6 +539,7 @@ export interface FileRouteTypes {
     | '/categorias'
     | '/cliente'
     | '/clientes'
+    | '/comissao-johny'
     | '/espera'
     | '/estoque'
     | '/fat-quadra'
@@ -531,9 +562,11 @@ export interface FileRouteTypes {
     | '/tarefas'
     | '/trocas-cliente'
     | '/trust'
+    | '/turmas'
     | '/usuarios'
     | '/vagas-fixas'
     | '/vinculos-professor'
+    | '/whatsapp'
     | '/clientes/$clientId'
     | '/clientes/limite-debito'
     | '/mapa/tv'
@@ -558,6 +591,7 @@ export interface FileRouteTypes {
     | '/categorias'
     | '/cliente'
     | '/clientes'
+    | '/comissao-johny'
     | '/espera'
     | '/estoque'
     | '/fat-quadra'
@@ -581,9 +615,11 @@ export interface FileRouteTypes {
     | '/tarefas'
     | '/trocas-cliente'
     | '/trust'
+    | '/turmas'
     | '/usuarios'
     | '/vagas-fixas'
     | '/vinculos-professor'
+    | '/whatsapp'
     | '/clientes/$clientId'
     | '/clientes/limite-debito'
     | '/mapa/tv'
@@ -609,6 +645,7 @@ export interface RootRouteChildren {
   CategoriasRoute: typeof CategoriasRoute
   ClienteRoute: typeof ClienteRoute
   ClientesRoute: typeof ClientesRouteWithChildren
+  ComissaoJohnyRoute: typeof ComissaoJohnyRoute
   EsperaRoute: typeof EsperaRoute
   EstoqueRoute: typeof EstoqueRoute
   FatQuadraRoute: typeof FatQuadraRoute
@@ -632,9 +669,11 @@ export interface RootRouteChildren {
   TarefasRoute: typeof TarefasRoute
   TrocasClienteRoute: typeof TrocasClienteRoute
   TrustRoute: typeof TrustRoute
+  TurmasRoute: typeof TurmasRoute
   UsuariosRoute: typeof UsuariosRoute
   VagasFixasRoute: typeof VagasFixasRoute
   VinculosProfessorRoute: typeof VinculosProfessorRoute
+  WhatsappRoute: typeof WhatsappRoute
   ProfessorIndexRoute: typeof ProfessorIndexRoute
   ProfessorCadastroTokenRoute: typeof ProfessorCadastroTokenRoute
   ApiPublicHooksBookingConfirmationRemindersRoute: typeof ApiPublicHooksBookingConfirmationRemindersRoute
@@ -676,6 +715,13 @@ declare module '@tanstack/react-router' {
       path: '/clientes'
       fullPath: '/clientes'
       preLoaderRoute: typeof ClientesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/comissao-johny': {
+      id: '/comissao-johny'
+      path: '/comissao-johny'
+      fullPath: '/comissao-johny'
+      preLoaderRoute: typeof ComissaoJohnyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/espera': {
@@ -839,6 +885,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TrustRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/turmas': {
+      id: '/turmas'
+      path: '/turmas'
+      fullPath: '/turmas'
+      preLoaderRoute: typeof TurmasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/usuarios': {
       id: '/usuarios'
       path: '/usuarios'
@@ -858,6 +911,13 @@ declare module '@tanstack/react-router' {
       path: '/vinculos-professor'
       fullPath: '/vinculos-professor'
       preLoaderRoute: typeof VinculosProfessorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/whatsapp': {
+      id: '/whatsapp'
+      path: '/whatsapp'
+      fullPath: '/whatsapp'
+      preLoaderRoute: typeof WhatsappRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/clientes/$clientId': {
@@ -1051,6 +1111,7 @@ const rootRouteChildren: RootRouteChildren = {
   CategoriasRoute: CategoriasRoute,
   ClienteRoute: ClienteRoute,
   ClientesRoute: ClientesRouteWithChildren,
+  ComissaoJohnyRoute: ComissaoJohnyRoute,
   EsperaRoute: EsperaRoute,
   EstoqueRoute: EstoqueRoute,
   FatQuadraRoute: FatQuadraRoute,
@@ -1074,9 +1135,11 @@ const rootRouteChildren: RootRouteChildren = {
   TarefasRoute: TarefasRoute,
   TrocasClienteRoute: TrocasClienteRoute,
   TrustRoute: TrustRoute,
+  TurmasRoute: TurmasRoute,
   UsuariosRoute: UsuariosRoute,
   VagasFixasRoute: VagasFixasRoute,
   VinculosProfessorRoute: VinculosProfessorRoute,
+  WhatsappRoute: WhatsappRoute,
   ProfessorIndexRoute: ProfessorIndexRoute,
   ProfessorCadastroTokenRoute: ProfessorCadastroTokenRoute,
   ApiPublicHooksBookingConfirmationRemindersRoute:
