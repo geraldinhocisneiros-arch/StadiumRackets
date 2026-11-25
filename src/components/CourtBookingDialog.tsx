@@ -352,6 +352,7 @@ export function CourtBookingDialog({
       notes: string | null;
       valid_from: string | null;
       valid_until: string | null;
+      created_at: string | null;
       clients: { full_name: string } | null;
     }[]
   >([]);
@@ -570,7 +571,7 @@ export function CourtBookingDialog({
       const { data } = await supabase
         .from("client_schedules")
         .select(
-          "id, client_id, start_time, end_time, teacher_id, notes, valid_from, valid_until, clients!client_id(full_name)",
+          "id, client_id, start_time, end_time, teacher_id, notes, valid_from, valid_until, created_at, clients!client_id(full_name)",
         )
         .eq("weekday", existingFixed.weekday)
         .eq("court", existingFixed.court ?? 0)
@@ -595,6 +596,7 @@ export function CourtBookingDialog({
           notes: string | null;
           valid_from: string | null;
           valid_until: string | null;
+          created_at: string | null;
           clients: { full_name: string } | { full_name: string }[] | null;
         }>
       )
@@ -610,6 +612,7 @@ export function CourtBookingDialog({
           notes: r.notes,
           valid_from: r.valid_from,
           valid_until: r.valid_until,
+          created_at: r.created_at,
           clients: Array.isArray(r.clients) ? (r.clients[0] ?? null) : r.clients,
         }));
       setFixedSiblings(rows);
@@ -1372,37 +1375,54 @@ export function CourtBookingDialog({
   // Remove o fixo a partir da data escolhida: as semanas anteriores ficam
   // registradas (valid_until = véspera). Se a data é antes/no início do
   // fixo, não há nada pra guardar e a linha é apagada como antes.
+  // Horário dividido: remove o fixo de TODOS os clientes que dividem a
+  // quadra/horário (fixedSiblings), não só o do cliente clicado — antes
+  // sobrava o fixo do outro cliente na quadra. Cada linha decide sozinha se
+  // é apagada ou encerrada, pela própria data de início.
   const submitRemoveFixed = async () => {
     if (!existingFixed || !removeFixedFrom) return;
     const from = removeFixedFrom;
-    const createdOn = existingFixed.created_at
-      ? dateISOInRecife(new Date(existingFixed.created_at))
-      : null;
-    const fixedStart = existingFixed.valid_from ?? createdOn;
-    const deleteAll = !!fixedStart && from <= fixedStart;
+    const dayBefore = addDaysISO(from, -1);
+    const group = [
+      {
+        id: existingFixed.id,
+        valid_from: existingFixed.valid_from ?? null,
+        valid_until: existingFixed.valid_until ?? null,
+        created_at: existingFixed.created_at ?? null,
+      },
+      ...fixedSiblings,
+    ];
+    const plan = group.map((r) => {
+      const createdOn = r.created_at ? dateISOInRecife(new Date(r.created_at)) : null;
+      const start = r.valid_from ?? createdOn;
+      const del = !!start && from <= start;
+      const until = r.valid_until && r.valid_until < dayBefore ? r.valid_until : dayBefore;
+      return { id: r.id, del, until };
+    });
+    const deleteAll = plan.every((p) => p.del);
     const fromLabel = from.split("-").reverse().join("/");
+    const who =
+      group.length > 1 ? ` dos ${group.length} clientes que dividem este horário` : "";
     if (
       !(await confirm(
         deleteAll
-          ? "Remover este horário fixo? Ele ainda não tinha começado, então será apagado."
-          : `Remover este horário fixo a partir de ${fromLabel}? As semanas anteriores continuam registradas.`,
+          ? `Remover este horário fixo${who}? Ele ainda não tinha começado, então será apagado.`
+          : `Remover este horário fixo${who} a partir de ${fromLabel}? As semanas anteriores continuam registradas.`,
       ))
     )
       return;
     setSubmitting(true);
     let error: { message: string } | null = null;
-    if (deleteAll) {
-      ({ error } = await supabase.from("client_schedules").delete().eq("id", existingFixed.id));
-    } else {
-      const dayBefore = addDaysISO(from, -1);
-      const until =
-        existingFixed.valid_until && existingFixed.valid_until < dayBefore
-          ? existingFixed.valid_until
-          : dayBefore;
+    const toDelete = plan.filter((p) => p.del).map((p) => p.id);
+    if (toDelete.length > 0) {
+      ({ error } = await supabase.from("client_schedules").delete().in("id", toDelete));
+    }
+    for (const p of plan.filter((x) => !x.del)) {
+      if (error) break;
       ({ error } = await supabase
         .from("client_schedules")
-        .update({ valid_until: until })
-        .eq("id", existingFixed.id));
+        .update({ valid_until: p.until })
+        .eq("id", p.id));
     }
     setSubmitting(false);
     if (error) {
