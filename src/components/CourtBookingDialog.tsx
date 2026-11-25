@@ -630,7 +630,7 @@ export function CourtBookingDialog({
   // sobrescreve — o jogo de ranking usa a categoria do próprio jogo, não a
   // categoria padrão de cada jogador.
   // O Professor é pré-preenchido em outro efeito (abaixo), só na locação
-  // avulsa nova.
+  // nova (avulsa ou fixa).
   useEffect(() => {
     if (!clientId) return;
     if (existing && clientId === (existing.client_id ?? "")) return;
@@ -641,19 +641,19 @@ export function CourtBookingDialog({
     if (c?.category_id) setCategoryId(c.category_id);
   }, [clientId, clients, existing, categories, categoryId]);
 
-  // Locação avulsa nova: pré-preenche o Professor com o professor principal
-  // do cadastro do cliente (a recepção ainda pode trocar). Só substitui o
-  // campo se ele estiver vazio ou ainda com o valor que este efeito mesmo
-  // colocou — assim, trocar o cliente atualiza o professor, mas uma escolha
-  // manual nunca é sobrescrita. Não mexe em ranking (RKG Masc/Fem), que não
-  // tem professor, nem em edição de reserva/fixo existente.
+  // Locação nova (avulsa ou fixa): pré-preenche o Professor com o professor
+  // principal do cadastro do cliente (a recepção ainda pode trocar). Só
+  // substitui o campo se ele estiver vazio ou ainda com o valor que este
+  // efeito mesmo colocou — assim, trocar o cliente atualiza o professor, mas
+  // uma escolha manual nunca é sobrescrita. Não mexe em ranking (RKG
+  // Masc/Fem), que não tem professor, nem em edição de reserva/fixo existente.
   const teacherAutoFilledRef = useRef<string | null>(null);
   useEffect(() => {
     if (!open) {
       teacherAutoFilledRef.current = null;
       return;
     }
-    if (existing || existingFixed || kind !== "avulsa" || !clientId) return;
+    if (existing || existingFixed || !clientId) return;
     if (isRankingCategoryName(categories.find((x) => x.id === categoryId)?.name ?? null)) return;
     if (teacherId && teacherId !== teacherAutoFilledRef.current) return;
     const c = clients.find((x) => x.id === clientId);
@@ -662,7 +662,7 @@ export function CourtBookingDialog({
     if (clientTeacher === teacherId) return;
     teacherAutoFilledRef.current = clientTeacher || null;
     setTeacherId(clientTeacher);
-  }, [open, existing, existingFixed, kind, clientId, clients, teachers, categories, categoryId, teacherId]);
+  }, [open, existing, existingFixed, clientId, clients, teachers, categories, categoryId, teacherId]);
 
   // Avisa a recepção quando o cliente selecionado está com saldo negativo,
   // pra lembrar de cobrar a quitação antes de confirmar a reserva.
