@@ -1361,8 +1361,18 @@ function FixedLabel({
       </div>
     );
   }
-  const firstName = (s?: FixedSchedule) =>
-    s?.clients?.full_name?.split(" ")[0] ?? "Cliente";
+  // Nome + último sobrenome (ex.: "Gabriela Souza Lima" → "Gabriela Lima"),
+  // para diferenciar homônimos quando o horário é dividido.
+  const shortName = (s?: FixedSchedule) => {
+    const parts = s?.clients?.full_name?.trim().split(/\s+/).filter(Boolean) ?? [];
+    if (parts.length === 0) return "Cliente";
+    if (parts.length === 1) return parts[0];
+    const last = parts[parts.length - 1];
+    // Sufixos como "Filho/Júnior/Neto" sozinhos não identificam: inclui o sobrenome anterior.
+    const isSuffix = /^(filho|filha|j[uú]nior|jr\.?|neto|neta|sobrinho|segundo|terceiro)$/i.test(last);
+    if (isSuffix && parts.length > 2) return `${parts[0]} ${parts[parts.length - 2]} ${last}`;
+    return `${parts[0]} ${last}`;
+  };
   const primaryName = fixed.clients?.full_name ?? "Fixo";
   const primaryClientId = fixed.clients?.id ?? fixed.client_id ?? null;
   const showSiblings = siblings.length > 0;
@@ -1380,14 +1390,14 @@ function FixedLabel({
         }
       >
         <ClientLink clientId={primaryClientId}>
-          {showSiblings ? firstName(fixed) : primaryName}
+          {showSiblings ? shortName(fixed) : primaryName}
         </ClientLink>
         {showSiblings &&
           siblings.map((s, idx) => (
             <span key={`${s.id}-${idx}`}>
               {" + "}
               <ClientLink clientId={s.clients?.id ?? s.client_id ?? null}>
-                {firstName(s)}
+                {shortName(s)}
               </ClientLink>
             </span>
           ))}
