@@ -2716,6 +2716,7 @@ export type Database = {
       teachers: {
         Row: {
           active: boolean
+          can_cancel_any_tennis: boolean
           created_at: string
           id: string
           is_demo: boolean
@@ -2726,6 +2727,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          can_cancel_any_tennis?: boolean
           created_at?: string
           id?: string
           is_demo?: boolean
@@ -2736,6 +2738,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          can_cancel_any_tennis?: boolean
           created_at?: string
           id?: string
           is_demo?: boolean

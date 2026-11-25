@@ -77,6 +77,7 @@ import {
   courtShort,
 } from "@/lib/court-map";
 import { fetchOpenDebtByClient } from "@/lib/open-debt";
+import { TENNIS_COURT } from "@/lib/court-map";
 import { useLiveReload } from "@/lib/live-reload";
 import type { PriceBand } from "@/lib/pricing";
 import {
@@ -1351,6 +1352,9 @@ interface TeacherInfo {
   id: string;
   name: string;
   can_book_directly?: boolean;
+  // Pode cancelar QUALQUER locação da quadra de tênis (quadra 1), mesmo de
+  // outro professor ou sem professor — ver tennis_cancel_any_* no banco.
+  can_cancel_any_tennis?: boolean;
 }
 
 function MapaProfessorRoute() {
@@ -1369,7 +1373,7 @@ function MapaProfessorRoute() {
       }
       const { data: t } = await supabase
         .from("teachers")
-        .select("id, name, can_book_directly")
+        .select("id, name, can_book_directly, can_cancel_any_tennis")
         .eq("user_id", session.user.id)
         .maybeSingle();
       if (!t) {
@@ -1434,6 +1438,9 @@ interface CancelTarget {
   // compartilham exatamente este horário/quadra — cancelados junto, pra
   // liberar a quadra inteira em vez de deixar o(s) outro(s) ainda ocupando.
   siblings?: { scheduleId: string; clientId: string | null; clientName: string }[];
+  // Cancelamento de aula/locação de tênis que NÃO é do professor (permissão
+  // can_cancel_any_tennis) — vai pelas RPCs tennis_cancel_any_*.
+  anyTennis?: boolean;
 }
 
 function MapaProfessorPage({
@@ -1568,6 +1575,11 @@ function MapaProfessorPage({
         (cell.kind === "booking" && !!cell.booking?.cancelled_at);
       if (isAvailable) {
         openNewBooking(court, hour);
+        return;
+      }
+      if (teacher.can_cancel_any_tennis && court === TENNIS_COURT) {
+        const anyTarget = buildAnyTennisTarget(court, hour, cell);
+        if (anyTarget) setCancelTarget(anyTarget);
         return;
       }
       toast.info("Você só pode visualizar esta quadra — ela não é sua.");
@@ -1733,6 +1745,70 @@ function MapaProfessorPage({
     await requestCancel(target);
   };
 
+  // Alvo de cancelamento para aula/locação de tênis de terceiros. Fixo
+  // dividido (dupla/grupo): cancela todos que estão na quadra no horário,
+  // senão a quadra continuaria ocupada pelo(s) outro(s).
+  const buildAnyTennisTarget = (court: number, hour: number, cell: CourtCell): CancelTarget | null => {
+    if (cell.kind === "booking" && cell.booking && !cell.booking.cancelled_at) {
+      const b = cell.booking;
+      return {
+        kind: "booking",
+        court,
+        hour,
+        clientName: b.clients?.full_name ?? b.guest_name ?? "Cliente",
+        clientId: b.client_id ?? null,
+        bookingId: b.id,
+        startTs: new Date(`${date}T${b.start_time}-03:00`).getTime(),
+        date,
+        anyTennis: true,
+      };
+    }
+    if (cell.kind === "fixed" && cell.fixed && !cell.cancelledException) {
+      const f = cell.fixed;
+      return {
+        kind: "fixed",
+        court,
+        hour: Number(f.start_time.slice(0, 2)),
+        clientName: f.clients?.full_name ?? "Cliente",
+        clientId: f.client_id ?? null,
+        scheduleId: f.id,
+        startTs: new Date(`${date}T${f.start_time}-03:00`).getTime(),
+        date,
+        fixedStart: f.start_time,
+        fixedEnd: f.end_time,
+        siblings: (cell.fixedSiblings ?? []).map((s) => ({
+          scheduleId: s.id,
+          clientId: s.client_id ?? null,
+          clientName: s.clients?.full_name ?? "Cliente",
+        })),
+        anyTennis: true,
+      };
+    }
+    return null;
+  };
+
+  const confirmAnyTennisCancel = async (target: CancelTarget) => {
+    setCancelling(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rpc = (supabase as any).rpc.bind(supabase);
+    const { data, error } =
+      target.kind === "booking"
+        ? await rpc("tennis_cancel_any_booking", { _booking_id: target.bookingId })
+        : await rpc("tennis_cancel_any_fixed", {
+            _schedule_ids: [target.scheduleId, ...(target.siblings ?? []).map((s) => s.scheduleId)],
+            _date: target.date,
+          });
+    setCancelling(false);
+    const res = data as { ok: boolean; error?: string } | null;
+    if (error || !res?.ok) {
+      toast.error(error?.message ?? res?.error ?? "Não foi possível cancelar.");
+      return;
+    }
+    toast.success("Cancelado. O cliente foi avisado no app.");
+    setCancelTarget(null);
+    load();
+  };
+
   const requestCancel = useCallback(async (target: CancelTarget) => {
     let fee = 0;
     if (target.clientId) {
@@ -1799,6 +1875,10 @@ function MapaProfessorPage({
 
   const confirmCancel = async () => {
     if (!cancelTarget) return;
+    if (cancelTarget.anyTennis) {
+      await confirmAnyTennisCancel(cancelTarget);
+      return;
+    }
     setCancelling(true);
     const {
       data: { user },
@@ -2181,7 +2261,14 @@ function MapaProfessorPage({
             </DialogDescription>
           </DialogHeader>
 
-          {willCharge && (
+          {cancelTarget?.anyTennis && (
+            <div className="rounded-md border p-3 text-sm text-muted-foreground">
+              Esta locação não é sua. O cliente recebe o aviso no app e, se faltar
+              menos de 24h, a recepção recebe o aviso de cobrança.
+            </div>
+          )}
+
+          {willCharge && !cancelTarget?.anyTennis && (
             <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
               <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-warning-foreground" />
               <div>

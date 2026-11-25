@@ -53,6 +53,7 @@ interface Teacher {
   active: boolean;
   user_id: string | null;
   phone: string | null;
+  can_cancel_any_tennis?: boolean;
 }
 
 function ProfessoresPage() {
@@ -216,18 +217,28 @@ function TeacherDialog({
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [active, setActive] = useState(true);
+  const [cancelAnyTennis, setCancelAnyTennis] = useState(false);
+  const { isAdmin } = useAuth();
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     setName(editing?.name ?? "");
     setPhone(editing?.phone ?? "");
     setActive(editing?.active ?? true);
+    setCancelAnyTennis(editing?.can_cancel_any_tennis ?? false);
   }, [editing]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    const payload = { name: name.trim(), phone: phone.trim() || null, active };
+    // Só admin mexe na permissão de cancelar qualquer aula de tênis (o banco
+    // também bloqueia) — fora do payload pra recepção não esbarrar no bloqueio.
+    const payload = {
+      name: name.trim(),
+      phone: phone.trim() || null,
+      active,
+      ...(isAdmin ? { can_cancel_any_tennis: cancelAnyTennis } : {}),
+    };
     const { error } = editing
       ? await supabase.from("teachers").update(payload).eq("id", editing.id)
       : await supabase.from("teachers").insert(payload);
@@ -263,6 +274,19 @@ function TeacherDialog({
           <Label htmlFor="tactive" className="cursor-pointer">Ativo</Label>
           <Switch id="tactive" checked={active} onCheckedChange={setActive} />
         </div>
+        {isAdmin && (
+          <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+            <div>
+              <Label htmlFor="tcancelany" className="cursor-pointer">
+                Pode cancelar qualquer locação de tênis
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Inclusive de outros professores ou sem professor. Não vale para pickleball.
+              </p>
+            </div>
+            <Switch id="tcancelany" checked={cancelAnyTennis} onCheckedChange={setCancelAnyTennis} />
+          </div>
+        )}
         <DialogFooter>
           <Button type="submit" disabled={submitting}>
             {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
