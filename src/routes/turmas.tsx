@@ -211,6 +211,8 @@ function TurmasPage() {
         </Card>
       </div>
 
+      <MakeupBalances members={members} />
+
       <div className="flex items-center gap-2">
         <Switch id="show-ended" checked={showEnded} onCheckedChange={setShowEnded} />
         <Label htmlFor="show-ended">Mostrar turmas encerradas</Label>
@@ -717,6 +719,123 @@ function ClassDialog({
   );
 }
 
+// ----------------------------------------------- saldo de reposições ---
+
+interface MakeupRow {
+  client_id: string;
+  full_name: string;
+  earned: number;
+  used: number;
+  available: number;
+}
+
+/**
+ * Reposições em aberto: cancelamentos no prazo (ou abonados) na chamada da
+ * turma menos reposições já usadas. Sem validade — é aula que a academia
+ * deve ao aluno, então o total aqui é um passivo a acompanhar.
+ */
+function MakeupBalances({ members }: { members: PickleballClassMember[] }) {
+  const [rows, setRows] = useState<MakeupRow[] | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const names = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const x of members) m.set(x.client_id, x.full_name);
+    return m;
+  }, [members]);
+  const key = [...names.keys()].sort().join(",");
+
+  useEffect(() => {
+    const ids = [...names.keys()];
+    if (ids.length === 0) {
+      setRows([]);
+      return;
+    }
+    supabase.rpc("pickleball_makeup_balance", { _client_ids: ids }).then(({ data, error }) => {
+      if (error) return toast.error(error.message);
+      setRows(
+        ((data ?? []) as Omit<MakeupRow, "full_name">[])
+          .filter((r) => r.earned > 0 || r.used > 0)
+          .map((r) => ({ ...r, full_name: names.get(r.client_id) ?? "—" }))
+          .sort((a, b) => b.available - a.available || a.full_name.localeCompare(b.full_name)),
+      );
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  if (!rows) return null;
+  const open = rows.filter((r) => r.available > 0);
+  const totalOpen = open.reduce((s, r) => s + r.available, 0);
+  const list = showAll ? rows : open;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          <div>
+            <CardTitle className="text-base">Reposições a usar</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Aulas que os alunos têm para repor (cancelaram no prazo ou foram abonados). Não vencem
+              — acompanhe para não lotar as turmas.
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-semibold">{totalOpen}</div>
+            <div className="text-xs text-muted-foreground">
+              {open.length} aluno{open.length === 1 ? "" : "s"}
+            </div>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {list.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {rows.length === 0
+              ? "Nenhum cancelamento com reposição ainda."
+              : "Ninguém com reposição em aberto."}
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Aluno</TableHead>
+                <TableHead className="text-right">Ganhas</TableHead>
+                <TableHead className="text-right">Usadas</TableHead>
+                <TableHead className="text-right">A usar</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {list.map((r) => (
+                <TableRow key={r.client_id}>
+                  <TableCell>{r.full_name}</TableCell>
+                  <TableCell className="text-right">{r.earned}</TableCell>
+                  <TableCell className="text-right">{r.used}</TableCell>
+                  <TableCell
+                    className={cn(
+                      "text-right font-semibold",
+                      r.available >= 3 && "text-amber-700 dark:text-amber-400",
+                    )}
+                  >
+                    {r.available}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+        {rows.length > open.length && (
+          <button
+            type="button"
+            className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+            onClick={() => setShowAll((v) => !v)}
+          >
+            {showAll ? "Mostrar só quem tem a usar" : `Ver histórico de todos (${rows.length})`}
+          </button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ------------------------------------------------------ mensalidades ---
 
 interface FeeRow {
@@ -729,7 +848,8 @@ interface FeeRow {
   from_category: boolean;
 }
 
-const parseAmount = (v: string): number => Math.round((Number(v.replace(",", ".")) || 0) * 100) / 100;
+const parseAmount = (v: string): number =>
+  Math.round((Number(v.replace(",", ".")) || 0) * 100) / 100;
 
 const FEE_STATUS: Record<FeeRow["status"], { label: string; cls: string }> = {
   gerar: {
@@ -797,9 +917,12 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
   }, [open, month, kind]);
 
   // Valor digitado aqui vai pro cadastro do aluno (pickleball: todas as linhas).
-  const editable = (r: FeeRow) => r.from_category && (r.status === "gerar" || r.status === "sem_valor");
+  const editable = (r: FeeRow) =>
+    r.from_category && (r.status === "gerar" || r.status === "sem_valor");
   const effectiveAmount = (r: FeeRow) =>
-    editable(r) && edits[r.client_id] !== undefined ? parseAmount(edits[r.client_id]!) : Number(r.amount);
+    editable(r) && edits[r.client_id] !== undefined
+      ? parseAmount(edits[r.client_id]!)
+      : Number(r.amount);
   const toGenerate = (rows ?? []).filter(
     (r) => (r.status === "gerar" || r.status === "sem_valor") && effectiveAmount(r) > 0,
   );
@@ -820,7 +943,8 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
     // Grava no cadastro do aluno o valor digitado: o gerador lê de lá, e o
     // Caixa já preenche esse valor quando o aluno vier pagar.
     const changed = (rows ?? []).filter(
-      (r) => editable(r) && edits[r.client_id] !== undefined && effectiveAmount(r) !== Number(r.amount),
+      (r) =>
+        editable(r) && edits[r.client_id] !== undefined && effectiveAmount(r) !== Number(r.amount),
     );
     for (const r of changed) {
       const { error: upErr } = await supabase
@@ -885,9 +1009,7 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
           {loading || !rows ? (
             <div className="py-6 text-center text-muted-foreground">Carregando prévia...</div>
           ) : rows.length === 0 ? (
-            <div className="py-6 text-center text-muted-foreground">
-              {K.empty}
-            </div>
+            <div className="py-6 text-center text-muted-foreground">{K.empty}</div>
           ) : (
             <Table>
               <TableHeader>
@@ -909,8 +1031,12 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
                           inputMode="decimal"
                           className="ml-auto h-8 w-24 text-right"
                           placeholder="R$"
-                          value={edits[r.client_id] ?? (Number(r.amount) > 0 ? String(r.amount) : "")}
-                          onChange={(e) => setEdits((m) => ({ ...m, [r.client_id]: e.target.value }))}
+                          value={
+                            edits[r.client_id] ?? (Number(r.amount) > 0 ? String(r.amount) : "")
+                          }
+                          onChange={(e) =>
+                            setEdits((m) => ({ ...m, [r.client_id]: e.target.value }))
+                          }
                         />
                       ) : (
                         fmtBRL(r.amount)
@@ -918,8 +1044,11 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
                     </TableCell>
                     <TableCell>
                       {(() => {
-                        const st =
-                          editable(r) ? (effectiveAmount(r) > 0 ? "gerar" : "sem_valor") : r.status;
+                        const st = editable(r)
+                          ? effectiveAmount(r) > 0
+                            ? "gerar"
+                            : "sem_valor"
+                          : r.status;
                         return (
                           <span className={cn("rounded px-1.5 py-0.5 text-xs", FEE_STATUS[st].cls)}>
                             {FEE_STATUS[st].label}
