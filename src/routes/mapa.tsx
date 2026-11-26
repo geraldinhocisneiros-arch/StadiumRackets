@@ -883,8 +883,8 @@ function MapaPage() {
       });
       return;
     }
-    // Turma de pickleball: mensalidade única, sem presença/cobrança por
-    // aula — mostra só a turma (alunos, professor) com atalho para Turmas.
+    // Turma de pickleball: mensalidade única, sem cobrança por aula — abre a
+    // chamada do dia (veio / faltou / cancelou + reposição).
     if (cell.kind === "fixed" && !cell.cancelledException && cell.fixed?.class_id) {
       setClassDay({ fixed: cell.fixed, siblings: cell.fixedSiblings ?? [] });
       return;
@@ -1218,6 +1218,7 @@ function MapaPage() {
       <ClassDayDialog
         data={classDay}
         date={date}
+        onChanged={() => void load()}
         onOpenChange={(v) => {
           if (!v) setClassDay(null);
         }}

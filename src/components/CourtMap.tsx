@@ -627,6 +627,29 @@ export function CourtMap({
         {cell.kind === "fixed" &&
           !cell.cancelledException &&
           !hideOccupantDetails &&
+          cell.fixed!.class_id &&
+          attendanceByScheduleId &&
+          (() => {
+            // Turma: placar da chamada (marcados / alunos).
+            const all = [cell.fixed!, ...(cell.fixedSiblings ?? [])].filter(
+              (x) => x.class_id === cell.fixed!.class_id,
+            );
+            const marked = all.filter((x) => attendanceByScheduleId[x.id]).length;
+            if (marked === 0) return null;
+            const done = marked === all.length;
+            return (
+              <span
+                title={done ? "Chamada feita" : `Chamada: ${marked} de ${all.length} marcados`}
+                className={`pointer-events-none absolute top-0.5 right-0.5 z-10 rounded px-1 text-[9px] font-bold ${done ? "bg-emerald-600 text-white" : "bg-amber-500 text-white"}`}
+              >
+                {done ? "✓" : `${marked}/${all.length}`}
+              </span>
+            );
+          })()}
+        {cell.kind === "fixed" &&
+          !cell.cancelledException &&
+          !hideOccupantDetails &&
+          !cell.fixed!.class_id &&
           attendanceByScheduleId?.[cell.fixed!.id] &&
           (() => {
             const st = attendanceByScheduleId[cell.fixed!.id]!.status;
