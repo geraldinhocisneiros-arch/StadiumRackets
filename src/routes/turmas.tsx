@@ -57,6 +57,22 @@ export const Route = createFileRoute("/turmas")({
 });
 
 const WEEKDAY_LONG = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+/** Mensalidade do cadastro: custom_amount; sem ele, o padrão da categoria
+ * só se ela for Escolinha Pickleball (mesma regra do gerador). */
+function clientMonthlyFee(
+  c: {
+    custom_amount: number | null;
+    client_categories: { name: string; default_amount: number | null } | null;
+  } | null,
+): number | null {
+  if (!c) return null;
+  if (c.custom_amount != null) return Number(c.custom_amount);
+  const cat = c.client_categories;
+  if (cat && cat.name.trim().toLowerCase() === "escolinha pickleball" && cat.default_amount != null)
+    return Number(cat.default_amount) || null;
+  return null;
+}
+
 // Ordem de exibição: segunda a domingo.
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
@@ -85,7 +101,7 @@ function TurmasPage() {
       supabase
         .from("client_schedules")
         .select(
-          "id, class_id, client_id, class_monthly_amount, valid_from, valid_until, clients!client_id(full_name, phone)",
+          "id, class_id, client_id, valid_from, valid_until, clients!client_id(full_name, phone, custom_amount, client_categories(name, default_amount))",
         )
         .not("class_id", "is", null),
       supabase.from("teachers").select("id, name, active").order("name"),
@@ -96,14 +112,20 @@ function TurmasPage() {
     setMembers(
       (
         (mRes.data ?? []) as unknown as Array<
-          Omit<PickleballClassMember, "full_name" | "phone"> & {
-            clients: { full_name: string; phone: string | null } | null;
+          Omit<PickleballClassMember, "full_name" | "phone" | "monthly_fee"> & {
+            clients: {
+              full_name: string;
+              phone: string | null;
+              custom_amount: number | null;
+              client_categories: { name: string; default_amount: number | null } | null;
+            } | null;
           }
         >
-      ).map((m) => ({
+      ).map(({ clients: c, ...m }) => ({
         ...m,
-        full_name: m.clients?.full_name ?? "—",
-        phone: m.clients?.phone ?? null,
+        full_name: c?.full_name ?? "—",
+        phone: c?.phone ?? null,
+        monthly_fee: clientMonthlyFee(c),
       })),
     );
     setTeachers((tRes.data ?? []) as Teacher[]);
@@ -130,8 +152,15 @@ function TurmasPage() {
   })).filter((g) => g.list.length > 0);
 
   const activeMembers = members.filter((m) => memberIsActiveOn(m, today));
-  const monthlyTotal = activeMembers.reduce((s, m) => s + Number(m.class_monthly_amount ?? 0), 0);
-  const studentCount = new Set(activeMembers.map((m) => m.client_id)).size;
+  // Uma mensalidade por aluno, mesmo que ele esteja em 2+ turmas.
+  const feeByClient = new Map(activeMembers.map((m) => [m.client_id, Number(m.monthly_fee ?? 0)]));
+  const monthlyTotal = [...feeByClient.values()].reduce((s, v) => s + v, 0);
+  const studentCount = feeByClient.size;
+  // Em quantas turmas (ativas ou futuras) cada aluno está.
+  const classCountByClient = new Map<string, number>();
+  for (const m of members)
+    if (memberIsActiveOn(m, today) || (m.valid_from ?? "") > today)
+      classCountByClient.set(m.client_id, (classCountByClient.get(m.client_id) ?? 0) + 1);
 
   return (
     <div className="space-y-6">
@@ -139,8 +168,9 @@ function TurmasPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Turmas de pickleball</h1>
           <p className="text-muted-foreground max-w-2xl">
-            Turma fixa ocupa a quadra no horário dela e o aluno paga uma mensalidade única — não há
-            cobrança por aula. Horário sem turma fica livre para locação.
+            Turma fixa ocupa a quadra no horário dela. A mensalidade é do aluno (valor do cadastro
+            dele): uma só por mês, não importa em quantas turmas ele esteja — não há cobrança por
+            aula. Horário sem turma fica livre para locação.
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -181,6 +211,8 @@ function TurmasPage() {
         </Card>
       </div>
 
+      <MakeupBalances members={members} />
+
       <div className="flex items-center gap-2">
         <Switch id="show-ended" checked={showEnded} onCheckedChange={setShowEnded} />
         <Label htmlFor="show-ended">Mostrar turmas encerradas</Label>
@@ -205,6 +237,7 @@ function TurmasPage() {
                   cls={c}
                   teacherName={teacherName(c.teacher_id)}
                   members={members.filter((m) => m.class_id === c.id)}
+                  classCountByClient={classCountByClient}
                   clients={clients}
                   today={today}
                   onEdit={() => {
@@ -238,6 +271,7 @@ function ClassCard({
   teacherName,
   members,
   clients,
+  classCountByClient,
   today,
   onEdit,
   onChanged,
@@ -245,6 +279,7 @@ function ClassCard({
   cls: PickleballClass;
   teacherName: string | null;
   members: PickleballClassMember[];
+  classCountByClient: Map<string, number>;
   clients: ClientOption[];
   today: string;
   onEdit: () => void;
@@ -252,7 +287,6 @@ function ClassCard({
 }) {
   const confirm = useConfirm();
   const [addClient, setAddClient] = useState("");
-  const [addAmount, setAddAmount] = useState("");
   const [addStart, setAddStart] = useState(today);
   const [busy, setBusy] = useState(false);
   const [showPast, setShowPast] = useState(false);
@@ -261,41 +295,35 @@ function ClassCard({
   const past = members.filter((m) => !active.includes(m));
   const ended = !classIsActiveOn(cls, today) && (cls.valid_from ?? "") <= today;
   const full = cls.capacity != null && active.length >= cls.capacity;
-  const total = active.reduce((s, m) => s + Number(m.class_monthly_amount ?? 0), 0);
   const enrolledIds = new Set(active.map((m) => m.client_id));
 
   const addMember = async () => {
     if (!addClient) return toast.error("Escolha o aluno.");
-    const amount = Number(addAmount.replace(",", "."));
-    if (addAmount.trim() === "" || Number.isNaN(amount) || amount < 0)
-      return toast.error("Informe a mensalidade (0 se ela já é cobrada em outra turma).");
     setBusy(true);
     const { error } = await supabase.rpc("pickleball_class_add_member", {
       _class_id: cls.id,
       _client_id: addClient,
-      _monthly_amount: amount,
       _start: addStart || today,
     });
     setBusy(false);
     if (error) return toast.error(error.message);
     toast.success("Aluno matriculado");
     setAddClient("");
-    setAddAmount("");
     onChanged();
   };
 
   const changeAmount = async (m: PickleballClassMember) => {
     const raw = window.prompt(
-      `Mensalidade de ${m.full_name} nesta turma (R$):`,
-      String(m.class_monthly_amount ?? 0),
+      `Mensalidade de ${m.full_name} (R$) — fica no cadastro do cliente e vale para todas as turmas dele. Deixe vazio para usar o padrão da categoria:`,
+      m.monthly_fee != null ? String(m.monthly_fee) : "",
     );
     if (raw == null) return;
-    const v = Number(raw.replace(",", "."));
-    if (Number.isNaN(v) || v < 0) return toast.error("Valor inválido.");
-    const { error } = await supabase.rpc("pickleball_class_set_member_amount", {
-      _schedule_id: m.id,
-      _monthly_amount: v,
-    });
+    const v = raw.trim() === "" ? null : Number(raw.replace(",", "."));
+    if (v != null && (Number.isNaN(v) || v < 0)) return toast.error("Valor inválido.");
+    const { error } = await supabase
+      .from("clients")
+      .update({ custom_amount: v })
+      .eq("id", m.client_id);
     if (error) return toast.error(error.message);
     toast.success("Mensalidade atualizada");
     onChanged();
@@ -306,9 +334,9 @@ function ClassCard({
       !(await confirm(
         `Encerrar a turma ${cls.name} agora?\n\n` +
           `• ${active.length} aluno(s) saem da turma e o horário fica livre para locação a partir de hoje.\n` +
-          `• A mensalidade desta turma deixa de ser gerada a partir do próximo mês, ` +
-          `inclusive para quem é da categoria Escolinha Pickleball.\n` +
-          `• Quem for continuar, coloque em outra turma — lá a mensalidade volta a ser gerada.\n\n` +
+          `• Quem não estiver em outra turma deixa de ter mensalidade gerada a partir do próximo mês, ` +
+          `inclusive quem é da categoria Escolinha Pickleball.\n` +
+          `• Quem for continuar, coloque em outra turma — a mensalidade continua a do cadastro.\n\n` +
           `O histórico fica guardado.`,
       ))
     )
@@ -324,7 +352,7 @@ function ClassCard({
   const removeMember = async (m: PickleballClassMember) => {
     if (
       !(await confirm(
-        `Tirar ${m.full_name} da turma ${cls.name}? A partir de hoje o horário dele(a) deixa de ocupar a quadra e a mensalidade desta turma deixa de ser gerada. O histórico fica guardado.`,
+        `Tirar ${m.full_name} da turma ${cls.name}? A partir de hoje o horário dele(a) deixa de ocupar a quadra. Se não estiver em outra turma, a mensalidade deixa de ser gerada. O histórico fica guardado.`,
       ))
     )
       return;
@@ -350,7 +378,6 @@ function ClassCard({
                 {active.length}
                 {cls.capacity != null ? ` / ${cls.capacity}` : ""} alunos
               </Badge>
-              <Badge variant="outline">{fmtBRL(total)}/mês</Badge>
               {ended && (
                 <Badge variant="outline">
                   Encerrada em {fmtDate(cls.valid_until + "T12:00:00")}
@@ -417,12 +444,20 @@ function ClassCard({
                   <TableCell className="text-right">
                     <button
                       type="button"
-                      className="underline-offset-2 hover:underline"
+                      className={cn(
+                        "underline-offset-2 hover:underline",
+                        m.monthly_fee == null && "text-amber-700 dark:text-amber-400",
+                      )}
                       onClick={() => changeAmount(m)}
-                      title="Alterar mensalidade"
+                      title="Alterar a mensalidade no cadastro do aluno"
                     >
-                      {fmtBRL(m.class_monthly_amount)}
+                      {m.monthly_fee != null ? fmtBRL(m.monthly_fee) : "sem valor"}
                     </button>
+                    {(classCountByClient.get(m.client_id) ?? 0) > 1 && (
+                      <div className="text-xs text-muted-foreground">
+                        {classCountByClient.get(m.client_id)} turmas · 1 mensalidade
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Button
@@ -449,24 +484,13 @@ function ClassCard({
               onChange={setAddClient}
               placeholder="Pesquisar cliente"
             />
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <Label className="text-xs">Mensalidade (R$)</Label>
-                <Input
-                  inputMode="decimal"
-                  value={addAmount}
-                  onChange={(e) => setAddAmount(e.target.value)}
-                  placeholder="ex.: 200"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">A partir de</Label>
-                <Input type="date" value={addStart} onChange={(e) => setAddStart(e.target.value)} />
-              </div>
+            <div className="space-y-1 max-w-[12rem]">
+              <Label className="text-xs">A partir de</Label>
+              <Input type="date" value={addStart} onChange={(e) => setAddStart(e.target.value)} />
             </div>
             <p className="text-xs text-muted-foreground">
-              Aluno de 2x por semana: matricule nas duas turmas e coloque a mensalidade em só uma
-              delas (0 na outra).
+              A mensalidade vem do cadastro do aluno — uma só por mês, mesmo em 2 ou mais turmas
+              (ex.: R$ 400 para 2x por semana). Clique no valor do aluno para alterar.
             </p>
             <Button size="sm" onClick={addMember} disabled={busy}>
               {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -695,6 +719,123 @@ function ClassDialog({
   );
 }
 
+// ----------------------------------------------- saldo de reposições ---
+
+interface MakeupRow {
+  client_id: string;
+  full_name: string;
+  earned: number;
+  used: number;
+  available: number;
+}
+
+/**
+ * Reposições em aberto: cancelamentos no prazo (ou abonados) na chamada da
+ * turma menos reposições já usadas. Sem validade — é aula que a academia
+ * deve ao aluno, então o total aqui é um passivo a acompanhar.
+ */
+function MakeupBalances({ members }: { members: PickleballClassMember[] }) {
+  const [rows, setRows] = useState<MakeupRow[] | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const names = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const x of members) m.set(x.client_id, x.full_name);
+    return m;
+  }, [members]);
+  const key = [...names.keys()].sort().join(",");
+
+  useEffect(() => {
+    const ids = [...names.keys()];
+    if (ids.length === 0) {
+      setRows([]);
+      return;
+    }
+    supabase.rpc("pickleball_makeup_balance", { _client_ids: ids }).then(({ data, error }) => {
+      if (error) return toast.error(error.message);
+      setRows(
+        ((data ?? []) as Omit<MakeupRow, "full_name">[])
+          .filter((r) => r.earned > 0 || r.used > 0)
+          .map((r) => ({ ...r, full_name: names.get(r.client_id) ?? "—" }))
+          .sort((a, b) => b.available - a.available || a.full_name.localeCompare(b.full_name)),
+      );
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  if (!rows) return null;
+  const open = rows.filter((r) => r.available > 0);
+  const totalOpen = open.reduce((s, r) => s + r.available, 0);
+  const list = showAll ? rows : open;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          <div>
+            <CardTitle className="text-base">Reposições a usar</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Aulas que os alunos têm para repor (cancelaram no prazo ou foram abonados). Não vencem
+              — acompanhe para não lotar as turmas.
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-semibold">{totalOpen}</div>
+            <div className="text-xs text-muted-foreground">
+              {open.length} aluno{open.length === 1 ? "" : "s"}
+            </div>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {list.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {rows.length === 0
+              ? "Nenhum cancelamento com reposição ainda."
+              : "Ninguém com reposição em aberto."}
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Aluno</TableHead>
+                <TableHead className="text-right">Ganhas</TableHead>
+                <TableHead className="text-right">Usadas</TableHead>
+                <TableHead className="text-right">A usar</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {list.map((r) => (
+                <TableRow key={r.client_id}>
+                  <TableCell>{r.full_name}</TableCell>
+                  <TableCell className="text-right">{r.earned}</TableCell>
+                  <TableCell className="text-right">{r.used}</TableCell>
+                  <TableCell
+                    className={cn(
+                      "text-right font-semibold",
+                      r.available >= 3 && "text-amber-700 dark:text-amber-400",
+                    )}
+                  >
+                    {r.available}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+        {rows.length > open.length && (
+          <button
+            type="button"
+            className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+            onClick={() => setShowAll((v) => !v)}
+          >
+            {showAll ? "Mostrar só quem tem a usar" : `Ver histórico de todos (${rows.length})`}
+          </button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ------------------------------------------------------ mensalidades ---
 
 interface FeeRow {
@@ -703,11 +844,12 @@ interface FeeRow {
   amount: number;
   classes: string;
   status: "gerar" | "ja_gerada" | "ja_lancada" | "sem_valor";
-  /** Aluno da categoria Escolinha Pickleball sem turma (valor vem do cadastro). */
+  /** Valor editável na prévia (vem do cadastro e o digitado volta pra ele). */
   from_category: boolean;
 }
 
-const parseAmount = (v: string): number => Math.round((Number(v.replace(",", ".")) || 0) * 100) / 100;
+const parseAmount = (v: string): number =>
+  Math.round((Number(v.replace(",", ".")) || 0) * 100) / 100;
 
 const FEE_STATUS: Record<FeeRow["status"], { label: string; cls: string }> = {
   gerar: {
@@ -774,9 +916,13 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, month, kind]);
 
-  const editable = (r: FeeRow) => r.from_category && (r.status === "gerar" || r.status === "sem_valor");
+  // Valor digitado aqui vai pro cadastro do aluno (pickleball: todas as linhas).
+  const editable = (r: FeeRow) =>
+    r.from_category && (r.status === "gerar" || r.status === "sem_valor");
   const effectiveAmount = (r: FeeRow) =>
-    editable(r) && edits[r.client_id] !== undefined ? parseAmount(edits[r.client_id]!) : Number(r.amount);
+    editable(r) && edits[r.client_id] !== undefined
+      ? parseAmount(edits[r.client_id]!)
+      : Number(r.amount);
   const toGenerate = (rows ?? []).filter(
     (r) => (r.status === "gerar" || r.status === "sem_valor") && effectiveAmount(r) > 0,
   );
@@ -797,7 +943,8 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
     // Grava no cadastro do aluno o valor digitado: o gerador lê de lá, e o
     // Caixa já preenche esse valor quando o aluno vier pagar.
     const changed = (rows ?? []).filter(
-      (r) => editable(r) && edits[r.client_id] !== undefined && effectiveAmount(r) !== Number(r.amount),
+      (r) =>
+        editable(r) && edits[r.client_id] !== undefined && effectiveAmount(r) !== Number(r.amount),
     );
     for (const r of changed) {
       const { error: upErr } = await supabase
@@ -825,7 +972,7 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
           <DialogDescription>
             Lança um débito por aluno (“{K.desc} — mês/ano”) com o valor do cadastro do cliente.
             {kind === "pickleball" &&
-              " No pickleball, quem está em turma entra com a soma das matrículas."}{" "}
+              " No pickleball é uma mensalidade por aluno, mesmo que ele esteja em várias turmas."}{" "}
             Nunca lança duas vezes no mesmo mês. Quando o aluno paga no Caixa, o crédito abate o
             débito — saldo zerado é mês quitado.
           </DialogDescription>
@@ -862,9 +1009,7 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
           {loading || !rows ? (
             <div className="py-6 text-center text-muted-foreground">Carregando prévia...</div>
           ) : rows.length === 0 ? (
-            <div className="py-6 text-center text-muted-foreground">
-              {K.empty}
-            </div>
+            <div className="py-6 text-center text-muted-foreground">{K.empty}</div>
           ) : (
             <Table>
               <TableHeader>
@@ -886,8 +1031,12 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
                           inputMode="decimal"
                           className="ml-auto h-8 w-24 text-right"
                           placeholder="R$"
-                          value={edits[r.client_id] ?? (Number(r.amount) > 0 ? String(r.amount) : "")}
-                          onChange={(e) => setEdits((m) => ({ ...m, [r.client_id]: e.target.value }))}
+                          value={
+                            edits[r.client_id] ?? (Number(r.amount) > 0 ? String(r.amount) : "")
+                          }
+                          onChange={(e) =>
+                            setEdits((m) => ({ ...m, [r.client_id]: e.target.value }))
+                          }
                         />
                       ) : (
                         fmtBRL(r.amount)
@@ -895,8 +1044,11 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
                     </TableCell>
                     <TableCell>
                       {(() => {
-                        const st =
-                          editable(r) ? (effectiveAmount(r) > 0 ? "gerar" : "sem_valor") : r.status;
+                        const st = editable(r)
+                          ? effectiveAmount(r) > 0
+                            ? "gerar"
+                            : "sem_valor"
+                          : r.status;
                         return (
                           <span className={cn("rounded px-1.5 py-0.5 text-xs", FEE_STATUS[st].cls)}>
                             {FEE_STATUS[st].label}

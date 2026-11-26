@@ -2277,6 +2277,48 @@ export type Database = {
         }
         Relationships: []
       }
+      pickleball_class_makeups: {
+        Row: {
+          class_date: string
+          class_id: string
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+        }
+        Insert: {
+          class_date: string
+          class_id: string
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+        }
+        Update: {
+          class_date?: string
+          class_id?: string
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pickleball_class_makeups_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "pickleball_classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pickleball_class_makeups_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pickleball_class_billing: {
         Row: {
           account_entry_id: string | null
@@ -3625,11 +3667,29 @@ export type Database = {
         Args: { _category_id: string; _client_id: string }
         Returns: string
       }
+      pickleball_class_add_makeup: {
+        Args: { _class_id: string; _client_id: string; _date: string }
+        Returns: string
+      }
+      pickleball_class_mark_attendance: {
+        Args: { _date: string; _schedule_id: string; _status: string | null }
+        Returns: string | null
+      }
+      pickleball_class_remove_makeup: { Args: { _id: string }; Returns: undefined }
+      pickleball_makeup_balance: {
+        Args: { _client_ids: string[] }
+        Returns: {
+          available: number
+          client_id: string
+          earned: number
+          used: number
+        }[]
+      }
       pickleball_class_add_member: {
         Args: {
           _class_id: string
           _client_id: string
-          _monthly_amount: number
+          _monthly_amount?: number
           _start?: string
         }
         Returns: string
