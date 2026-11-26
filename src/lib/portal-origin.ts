@@ -43,7 +43,10 @@ export function getLogoutReturnPath(): string {
  * URL is only a suggestion — the roles determine where they actually land.
  */
 export function resolveDestinationForRoles(roles: string[]): string {
-  if (roles.includes("admin") || roles.includes("diretoria")) return "/";
+  // "/" (dashboard financeiro) é exclusiva da diretoria. Admin sem
+  // diretoria cairia num "Acesso restrito" sem saída, então vai pro mapa.
+  if (roles.includes("diretoria")) return "/";
+  if (roles.includes("admin")) return "/mapa";
   if (roles.includes("recepcionista")) return "/mapa";
   if (roles.includes("professor")) return "/mapa";
   if (roles.includes("visualizador")) return "/mapa";
