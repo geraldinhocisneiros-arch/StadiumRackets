@@ -3,7 +3,8 @@
 // Turma = um horário semanal (quadra, dia, horário, professor). Matrícula =
 // uma linha de client_schedules com class_id preenchido — por isso o resto
 // do sistema já enxerga a quadra ocupada. A diferença para o fixo do tênis:
-// o aluno paga UMA mensalidade por mês e a presença NÃO gera cobrança.
+// o aluno paga UMA mensalidade por mês (valor do cadastro dele, não importa
+// em quantas turmas esteja) e a presença NÃO gera cobrança.
 // Ver supabase/migrations/20261117000000_turmas_pickleball.sql.
 
 export interface PickleballClass {
@@ -24,11 +25,14 @@ export interface PickleballClassMember {
   id: string; // client_schedules.id
   class_id: string;
   client_id: string;
-  class_monthly_amount: number | null;
   valid_from: string | null;
   valid_until: string | null;
   full_name: string;
   phone: string | null;
+  /** Mensalidade do cadastro do aluno (custom_amount ou padrão da categoria
+   * Escolinha Pickleball). É do aluno, não da matrícula: vale para todas as
+   * turmas dele e é cobrada uma vez por mês. */
+  monthly_fee: number | null;
 }
 
 /** Horário fixo que é matrícula de turma (não cobra por aula). */

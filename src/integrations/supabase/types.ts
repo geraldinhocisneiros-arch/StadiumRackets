@@ -3629,7 +3629,7 @@ export type Database = {
         Args: {
           _class_id: string
           _client_id: string
-          _monthly_amount: number
+          _monthly_amount?: number
           _start?: string
         }
         Returns: string

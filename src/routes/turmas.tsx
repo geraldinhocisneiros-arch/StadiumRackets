@@ -57,6 +57,22 @@ export const Route = createFileRoute("/turmas")({
 });
 
 const WEEKDAY_LONG = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+/** Mensalidade do cadastro: custom_amount; sem ele, o padrão da categoria
+ * só se ela for Escolinha Pickleball (mesma regra do gerador). */
+function clientMonthlyFee(
+  c: {
+    custom_amount: number | null;
+    client_categories: { name: string; default_amount: number | null } | null;
+  } | null,
+): number | null {
+  if (!c) return null;
+  if (c.custom_amount != null) return Number(c.custom_amount);
+  const cat = c.client_categories;
+  if (cat && cat.name.trim().toLowerCase() === "escolinha pickleball" && cat.default_amount != null)
+    return Number(cat.default_amount) || null;
+  return null;
+}
+
 // Ordem de exibição: segunda a domingo.
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
@@ -85,7 +101,7 @@ function TurmasPage() {
       supabase
         .from("client_schedules")
         .select(
-          "id, class_id, client_id, class_monthly_amount, valid_from, valid_until, clients!client_id(full_name, phone)",
+          "id, class_id, client_id, valid_from, valid_until, clients!client_id(full_name, phone, custom_amount, client_categories(name, default_amount))",
         )
         .not("class_id", "is", null),
       supabase.from("teachers").select("id, name, active").order("name"),
@@ -96,14 +112,20 @@ function TurmasPage() {
     setMembers(
       (
         (mRes.data ?? []) as unknown as Array<
-          Omit<PickleballClassMember, "full_name" | "phone"> & {
-            clients: { full_name: string; phone: string | null } | null;
+          Omit<PickleballClassMember, "full_name" | "phone" | "monthly_fee"> & {
+            clients: {
+              full_name: string;
+              phone: string | null;
+              custom_amount: number | null;
+              client_categories: { name: string; default_amount: number | null } | null;
+            } | null;
           }
         >
-      ).map((m) => ({
+      ).map(({ clients: c, ...m }) => ({
         ...m,
-        full_name: m.clients?.full_name ?? "—",
-        phone: m.clients?.phone ?? null,
+        full_name: c?.full_name ?? "—",
+        phone: c?.phone ?? null,
+        monthly_fee: clientMonthlyFee(c),
       })),
     );
     setTeachers((tRes.data ?? []) as Teacher[]);
@@ -130,8 +152,15 @@ function TurmasPage() {
   })).filter((g) => g.list.length > 0);
 
   const activeMembers = members.filter((m) => memberIsActiveOn(m, today));
-  const monthlyTotal = activeMembers.reduce((s, m) => s + Number(m.class_monthly_amount ?? 0), 0);
-  const studentCount = new Set(activeMembers.map((m) => m.client_id)).size;
+  // Uma mensalidade por aluno, mesmo que ele esteja em 2+ turmas.
+  const feeByClient = new Map(activeMembers.map((m) => [m.client_id, Number(m.monthly_fee ?? 0)]));
+  const monthlyTotal = [...feeByClient.values()].reduce((s, v) => s + v, 0);
+  const studentCount = feeByClient.size;
+  // Em quantas turmas (ativas ou futuras) cada aluno está.
+  const classCountByClient = new Map<string, number>();
+  for (const m of members)
+    if (memberIsActiveOn(m, today) || (m.valid_from ?? "") > today)
+      classCountByClient.set(m.client_id, (classCountByClient.get(m.client_id) ?? 0) + 1);
 
   return (
     <div className="space-y-6">
@@ -139,8 +168,9 @@ function TurmasPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Turmas de pickleball</h1>
           <p className="text-muted-foreground max-w-2xl">
-            Turma fixa ocupa a quadra no horário dela e o aluno paga uma mensalidade única — não há
-            cobrança por aula. Horário sem turma fica livre para locação.
+            Turma fixa ocupa a quadra no horário dela. A mensalidade é do aluno (valor do cadastro
+            dele): uma só por mês, não importa em quantas turmas ele esteja — não há cobrança por
+            aula. Horário sem turma fica livre para locação.
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -205,6 +235,7 @@ function TurmasPage() {
                   cls={c}
                   teacherName={teacherName(c.teacher_id)}
                   members={members.filter((m) => m.class_id === c.id)}
+                  classCountByClient={classCountByClient}
                   clients={clients}
                   today={today}
                   onEdit={() => {
@@ -238,6 +269,7 @@ function ClassCard({
   teacherName,
   members,
   clients,
+  classCountByClient,
   today,
   onEdit,
   onChanged,
@@ -245,6 +277,7 @@ function ClassCard({
   cls: PickleballClass;
   teacherName: string | null;
   members: PickleballClassMember[];
+  classCountByClient: Map<string, number>;
   clients: ClientOption[];
   today: string;
   onEdit: () => void;
@@ -252,7 +285,6 @@ function ClassCard({
 }) {
   const confirm = useConfirm();
   const [addClient, setAddClient] = useState("");
-  const [addAmount, setAddAmount] = useState("");
   const [addStart, setAddStart] = useState(today);
   const [busy, setBusy] = useState(false);
   const [showPast, setShowPast] = useState(false);
@@ -261,41 +293,35 @@ function ClassCard({
   const past = members.filter((m) => !active.includes(m));
   const ended = !classIsActiveOn(cls, today) && (cls.valid_from ?? "") <= today;
   const full = cls.capacity != null && active.length >= cls.capacity;
-  const total = active.reduce((s, m) => s + Number(m.class_monthly_amount ?? 0), 0);
   const enrolledIds = new Set(active.map((m) => m.client_id));
 
   const addMember = async () => {
     if (!addClient) return toast.error("Escolha o aluno.");
-    const amount = Number(addAmount.replace(",", "."));
-    if (addAmount.trim() === "" || Number.isNaN(amount) || amount < 0)
-      return toast.error("Informe a mensalidade (0 se ela já é cobrada em outra turma).");
     setBusy(true);
     const { error } = await supabase.rpc("pickleball_class_add_member", {
       _class_id: cls.id,
       _client_id: addClient,
-      _monthly_amount: amount,
       _start: addStart || today,
     });
     setBusy(false);
     if (error) return toast.error(error.message);
     toast.success("Aluno matriculado");
     setAddClient("");
-    setAddAmount("");
     onChanged();
   };
 
   const changeAmount = async (m: PickleballClassMember) => {
     const raw = window.prompt(
-      `Mensalidade de ${m.full_name} nesta turma (R$):`,
-      String(m.class_monthly_amount ?? 0),
+      `Mensalidade de ${m.full_name} (R$) — fica no cadastro do cliente e vale para todas as turmas dele. Deixe vazio para usar o padrão da categoria:`,
+      m.monthly_fee != null ? String(m.monthly_fee) : "",
     );
     if (raw == null) return;
-    const v = Number(raw.replace(",", "."));
-    if (Number.isNaN(v) || v < 0) return toast.error("Valor inválido.");
-    const { error } = await supabase.rpc("pickleball_class_set_member_amount", {
-      _schedule_id: m.id,
-      _monthly_amount: v,
-    });
+    const v = raw.trim() === "" ? null : Number(raw.replace(",", "."));
+    if (v != null && (Number.isNaN(v) || v < 0)) return toast.error("Valor inválido.");
+    const { error } = await supabase
+      .from("clients")
+      .update({ custom_amount: v })
+      .eq("id", m.client_id);
     if (error) return toast.error(error.message);
     toast.success("Mensalidade atualizada");
     onChanged();
@@ -306,9 +332,9 @@ function ClassCard({
       !(await confirm(
         `Encerrar a turma ${cls.name} agora?\n\n` +
           `• ${active.length} aluno(s) saem da turma e o horário fica livre para locação a partir de hoje.\n` +
-          `• A mensalidade desta turma deixa de ser gerada a partir do próximo mês, ` +
-          `inclusive para quem é da categoria Escolinha Pickleball.\n` +
-          `• Quem for continuar, coloque em outra turma — lá a mensalidade volta a ser gerada.\n\n` +
+          `• Quem não estiver em outra turma deixa de ter mensalidade gerada a partir do próximo mês, ` +
+          `inclusive quem é da categoria Escolinha Pickleball.\n` +
+          `• Quem for continuar, coloque em outra turma — a mensalidade continua a do cadastro.\n\n` +
           `O histórico fica guardado.`,
       ))
     )
@@ -324,7 +350,7 @@ function ClassCard({
   const removeMember = async (m: PickleballClassMember) => {
     if (
       !(await confirm(
-        `Tirar ${m.full_name} da turma ${cls.name}? A partir de hoje o horário dele(a) deixa de ocupar a quadra e a mensalidade desta turma deixa de ser gerada. O histórico fica guardado.`,
+        `Tirar ${m.full_name} da turma ${cls.name}? A partir de hoje o horário dele(a) deixa de ocupar a quadra. Se não estiver em outra turma, a mensalidade deixa de ser gerada. O histórico fica guardado.`,
       ))
     )
       return;
@@ -350,7 +376,6 @@ function ClassCard({
                 {active.length}
                 {cls.capacity != null ? ` / ${cls.capacity}` : ""} alunos
               </Badge>
-              <Badge variant="outline">{fmtBRL(total)}/mês</Badge>
               {ended && (
                 <Badge variant="outline">
                   Encerrada em {fmtDate(cls.valid_until + "T12:00:00")}
@@ -417,12 +442,20 @@ function ClassCard({
                   <TableCell className="text-right">
                     <button
                       type="button"
-                      className="underline-offset-2 hover:underline"
+                      className={cn(
+                        "underline-offset-2 hover:underline",
+                        m.monthly_fee == null && "text-amber-700 dark:text-amber-400",
+                      )}
                       onClick={() => changeAmount(m)}
-                      title="Alterar mensalidade"
+                      title="Alterar a mensalidade no cadastro do aluno"
                     >
-                      {fmtBRL(m.class_monthly_amount)}
+                      {m.monthly_fee != null ? fmtBRL(m.monthly_fee) : "sem valor"}
                     </button>
+                    {(classCountByClient.get(m.client_id) ?? 0) > 1 && (
+                      <div className="text-xs text-muted-foreground">
+                        {classCountByClient.get(m.client_id)} turmas · 1 mensalidade
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Button
@@ -449,24 +482,13 @@ function ClassCard({
               onChange={setAddClient}
               placeholder="Pesquisar cliente"
             />
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <Label className="text-xs">Mensalidade (R$)</Label>
-                <Input
-                  inputMode="decimal"
-                  value={addAmount}
-                  onChange={(e) => setAddAmount(e.target.value)}
-                  placeholder="ex.: 200"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">A partir de</Label>
-                <Input type="date" value={addStart} onChange={(e) => setAddStart(e.target.value)} />
-              </div>
+            <div className="space-y-1 max-w-[12rem]">
+              <Label className="text-xs">A partir de</Label>
+              <Input type="date" value={addStart} onChange={(e) => setAddStart(e.target.value)} />
             </div>
             <p className="text-xs text-muted-foreground">
-              Aluno de 2x por semana: matricule nas duas turmas e coloque a mensalidade em só uma
-              delas (0 na outra).
+              A mensalidade vem do cadastro do aluno — uma só por mês, mesmo em 2 ou mais turmas
+              (ex.: R$ 400 para 2x por semana). Clique no valor do aluno para alterar.
             </p>
             <Button size="sm" onClick={addMember} disabled={busy}>
               {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -703,7 +725,7 @@ interface FeeRow {
   amount: number;
   classes: string;
   status: "gerar" | "ja_gerada" | "ja_lancada" | "sem_valor";
-  /** Aluno da categoria Escolinha Pickleball sem turma (valor vem do cadastro). */
+  /** Valor editável na prévia (vem do cadastro e o digitado volta pra ele). */
   from_category: boolean;
 }
 
@@ -774,6 +796,7 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, month, kind]);
 
+  // Valor digitado aqui vai pro cadastro do aluno (pickleball: todas as linhas).
   const editable = (r: FeeRow) => r.from_category && (r.status === "gerar" || r.status === "sem_valor");
   const effectiveAmount = (r: FeeRow) =>
     editable(r) && edits[r.client_id] !== undefined ? parseAmount(edits[r.client_id]!) : Number(r.amount);
@@ -825,7 +848,7 @@ function FeesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
           <DialogDescription>
             Lança um débito por aluno (“{K.desc} — mês/ano”) com o valor do cadastro do cliente.
             {kind === "pickleball" &&
-              " No pickleball, quem está em turma entra com a soma das matrículas."}{" "}
+              " No pickleball é uma mensalidade por aluno, mesmo que ele esteja em várias turmas."}{" "}
             Nunca lança duas vezes no mesmo mês. Quando o aluno paga no Caixa, o crédito abate o
             débito — saldo zerado é mês quitado.
           </DialogDescription>
