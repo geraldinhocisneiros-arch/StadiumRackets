@@ -30,13 +30,43 @@ export interface ClassDayData {
   siblings: FixedSchedule[];
 }
 
-type RollStatus = "came" | "no_show" | "cancelled_ok";
+// Status gravados. Os de cancelamento: no prazo (≥ 12h antes, ganha
+// reposição), fora do prazo (sem reposição) e fora do prazo abonado (ganha).
+type RollStatus =
+  "came" | "no_show" | "cancelled_ok" | "cancelled_late_charged" | "cancelled_late_waived";
+type RollButton = "came" | "no_show" | "cancelled";
 
-const OPTIONS: { value: RollStatus; label: string; on: string }[] = [
+const ROLL_STATUSES: RollStatus[] = [
+  "came",
+  "no_show",
+  "cancelled_ok",
+  "cancelled_late_charged",
+  "cancelled_late_waived",
+];
+const isCancelled = (s: RollStatus | undefined) => !!s && s.startsWith("cancelled");
+const buttonOf = (s: RollStatus | undefined): RollButton | null =>
+  !s ? null : isCancelled(s) ? "cancelled" : (s as RollButton);
+
+const OPTIONS: { value: RollButton; label: string; on: string }[] = [
   { value: "came", label: "Veio", on: "bg-emerald-600 text-white border-emerald-600" },
   { value: "no_show", label: "Faltou", on: "bg-red-600 text-white border-red-600" },
-  { value: "cancelled_ok", label: "Cancelou", on: "bg-slate-500 text-white border-slate-500" },
+  { value: "cancelled", label: "Cancelou", on: "bg-slate-500 text-white border-slate-500" },
 ];
+
+const CANCEL_NOTE: Partial<Record<RollStatus, { text: string; cls: string }>> = {
+  cancelled_ok: {
+    text: "No prazo (12h) · +1 reposição",
+    cls: "text-emerald-700 dark:text-emerald-400",
+  },
+  cancelled_late_charged: {
+    text: "Fora do prazo (menos de 12h) · sem reposição",
+    cls: "text-red-700 dark:text-red-400",
+  },
+  cancelled_late_waived: {
+    text: "Fora do prazo · abonado · +1 reposição",
+    cls: "text-amber-700 dark:text-amber-400",
+  },
+};
 
 interface Makeup {
   id: string;
@@ -95,8 +125,8 @@ export function ClassDayDialog({
     if (mkRes.error) toast.error(mkRes.error.message);
     const st: Record<string, RollStatus> = {};
     for (const a of (attRes.data ?? []) as { client_schedule_id: string; status: string }[])
-      if (a.status === "came" || a.status === "no_show" || a.status === "cancelled_ok")
-        st[a.client_schedule_id] = a.status;
+      if ((ROLL_STATUSES as string[]).includes(a.status))
+        st[a.client_schedule_id] = a.status as RollStatus;
     setStatus(st);
     setMakeups(
       (
@@ -139,19 +169,27 @@ export function ClassDayDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, date, studentKey]);
 
-  const mark = async (s: FixedSchedule, value: RollStatus) => {
-    const next = status[s.id] === value ? null : value; // clicar de novo desmarca
+  // "cancelled": o banco aplica o prazo de 12h pelo horário de agora.
+  const send = async (s: FixedSchedule, next: string | null) => {
     setBusy(s.id);
-    const { error } = await supabase.rpc("pickleball_class_mark_attendance", {
+    const { data: saved, error } = await supabase.rpc("pickleball_class_mark_attendance", {
       _schedule_id: s.id,
       _date: date,
       _status: next,
     });
     setBusy(null);
     if (error) return toast.error(error.message);
+    if (next === "cancelled" && saved === "cancelled_late_charged")
+      toast.warning(
+        `${s.clients?.full_name ?? "Aluno"} cancelou com menos de 12h: sem reposição. Use “Abonar” se quiser dar a reposição.`,
+      );
     await load();
     onChanged?.();
   };
+
+  const mark = (s: FixedSchedule, value: RollButton) =>
+    // Clicar de novo no botão marcado desmarca.
+    send(s, buttonOf(status[s.id]) === value ? null : value);
 
   const markAllCame = async () => {
     const pending = students.filter((s) => !status[s.id]);
@@ -196,7 +234,7 @@ export function ClassDayDialog({
     await load();
   };
 
-  const count = (v: RollStatus) => students.filter((s) => status[s.id] === v).length;
+  const count = (v: RollButton) => students.filter((s) => buttonOf(status[s.id]) === v).length;
   const memberIds = new Set(students.map((s) => s.client_id));
   const makeupIds = new Set(makeups.map((m) => m.client_id));
 
@@ -219,7 +257,7 @@ export function ClassDayDialog({
                 <div className="text-sm font-medium">
                   Alunos ({students.length}) ·{" "}
                   <span className="text-muted-foreground font-normal">
-                    {count("came")} vieram · {count("no_show")} faltaram · {count("cancelled_ok")}{" "}
+                    {count("came")} vieram · {count("no_show")} faltaram · {count("cancelled")}{" "}
                     cancelaram
                   </span>
                 </div>
@@ -234,6 +272,31 @@ export function ClassDayDialog({
                   >
                     <div className="min-w-0">
                       <div className="text-sm truncate">{s.clients?.full_name ?? "Aluno"}</div>
+                      {CANCEL_NOTE[status[s.id]!] && (
+                        <div className={cn("text-xs", CANCEL_NOTE[status[s.id]!]!.cls)}>
+                          {CANCEL_NOTE[status[s.id]!]!.text}
+                          {status[s.id] === "cancelled_late_charged" && (
+                            <button
+                              type="button"
+                              disabled={busy != null}
+                              className="ml-2 font-medium underline underline-offset-2"
+                              onClick={() => send(s, "cancelled_late_waived")}
+                            >
+                              Abonar
+                            </button>
+                          )}
+                          {status[s.id] === "cancelled_late_waived" && (
+                            <button
+                              type="button"
+                              disabled={busy != null}
+                              className="ml-2 underline underline-offset-2"
+                              onClick={() => send(s, "cancelled_late_charged")}
+                            >
+                              Tirar abono
+                            </button>
+                          )}
+                        </div>
+                      )}
                       {(balance[s.client_id] ?? 0) > 0 && (
                         <div className="text-xs text-muted-foreground">
                           {balance[s.client_id]} reposição(ões) a usar
@@ -249,7 +312,9 @@ export function ClassDayDialog({
                           onClick={() => mark(s, o.value)}
                           className={cn(
                             "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50",
-                            status[s.id] === o.value ? o.on : "bg-background hover:bg-muted",
+                            buttonOf(status[s.id]) === o.value
+                              ? o.on
+                              : "bg-background hover:bg-muted",
                           )}
                         >
                           {o.label}
@@ -318,9 +383,11 @@ export function ClassDayDialog({
               </div>
 
               <p className="text-xs text-muted-foreground">
-                Veio = presença. Faltou = aula perdida, sem reposição. Cancelou = não conta presença
-                e o aluno ganha 1 reposição para usar em qualquer turma. Clique de novo para
-                desmarcar. Turma não lança aula no caixa (é mensalidade).
+                Veio = presença. Faltou = aula perdida, sem reposição. Cancelou = não conta
+                presença; até 12h antes da aula o aluno ganha 1 reposição (sem validade, em qualquer
+                turma com vaga). Com menos de 12h não ganha, a menos que seja abonado. Marque o
+                cancelamento na hora em que o aluno avisar — o prazo é contado pelo horário da
+                marcação. Clique de novo para desmarcar. Turma não lança aula no caixa.
               </p>
             </div>
 

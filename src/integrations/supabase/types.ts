@@ -3673,7 +3673,7 @@ export type Database = {
       }
       pickleball_class_mark_attendance: {
         Args: { _date: string; _schedule_id: string; _status: string | null }
-        Returns: undefined
+        Returns: string | null
       }
       pickleball_class_remove_makeup: { Args: { _id: string }; Returns: undefined }
       pickleball_makeup_balance: {
