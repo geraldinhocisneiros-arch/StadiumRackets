@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -81,8 +82,8 @@ const PROGRAMS = {
   },
   kids: {
     title: "Escolinha Kids de tênis",
-    intro: `Turmas da escolinha na quadra de tênis. Mensalidade por aluno (valor do cadastro; sem ele, o padrão da categoria × nº de turmas: 1x por semana, 2x por semana…). Quem não paga mensalidade vem como AVULSO: R$ ${KIDS_DROP_IN_PRICE} por aula, lançado na chamada, sem direito a reposição.`,
-    courts: [TENNIS_COURT] as number[],
+    intro: `Turmas da escolinha (quadras de pickleball ou de tênis), com os dias da semana de cada turma. Mensalidade por aluno (valor do cadastro; sem ele, o padrão da categoria × nº de dias por semana: 1x = R$ 200, 2x = R$ 400). Quem não paga mensalidade vem como AVULSO: R$ ${KIDS_DROP_IN_PRICE} por aula, lançado na chamada, sem direito a reposição.`,
+    courts: [...PICKLEBALL_COURTS, TENNIS_COURT] as number[],
     categoryLabel: "Escolinha Kids",
   },
 } as const;
@@ -110,11 +111,48 @@ function clientMonthlyFee(
 
 // Ordem de exibição: segunda a domingo.
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+const weekPos = (wd: number) => WEEK_ORDER.indexOf(wd);
+const WEEKDAY_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+/** "Segunda e Quarta", "Terça, Quinta e Sábado". */
+function daysLong(wds: number[]): string {
+  const names = [...wds].sort((a, b) => weekPos(a) - weekPos(b)).map((d) => WEEKDAY_LONG[d]!);
+  return names.length <= 1
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} e ${names[names.length - 1]}`;
+}
 
 interface Teacher {
   id: string;
   name: string;
   active: boolean;
+}
+
+/** Turma = um grupo de dias (cada dia é uma linha em pickleball_classes). */
+interface ClassGroup {
+  key: string;
+  /** Todos os dias já cadastrados (inclusive encerrados), em ordem seg→dom. */
+  all: PickleballClass[];
+  /** Dias ativos hoje ou que ainda vão começar. */
+  current: PickleballClass[];
+  /** Dia de referência (nome, horário, quadra, professor). */
+  ref: PickleballClass;
+}
+
+const groupKey = (c: PickleballClass) => c.group_id ?? c.id;
+const isCurrent = (c: PickleballClass, today: string) =>
+  classIsActiveOn(c, today) || (c.valid_from ?? "") > today;
+
+function buildGroups(classes: PickleballClass[], today: string): ClassGroup[] {
+  const map = new Map<string, PickleballClass[]>();
+  for (const c of classes) map.set(groupKey(c), [...(map.get(groupKey(c)) ?? []), c]);
+  return [...map.entries()].map(([key, list]) => {
+    const all = list.sort(
+      (a, b) => weekPos(a.weekday) - weekPos(b.weekday) || a.start_time.localeCompare(b.start_time),
+    );
+    const current = all.filter((c) => isCurrent(c, today));
+    return { key, all, current, ref: current[0] ?? all[all.length - 1]! };
+  });
 }
 
 export function ClassesPage({ program }: { program: ClassProgram }) {
@@ -125,7 +163,7 @@ export function ClassesPage({ program }: { program: ClassProgram }) {
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [showEnded, setShowEnded] = useState(false);
-  const [editing, setEditing] = useState<PickleballClass | null>(null);
+  const [editing, setEditing] = useState<ClassGroup | null>(null);
   const [classDialogOpen, setClassDialogOpen] = useState(false);
   const [feesOpen, setFeesOpen] = useState(false);
   const today = todayISO();
@@ -162,8 +200,8 @@ export function ClassesPage({ program }: { program: ClassProgram }) {
         } | null;
       }
     >;
-    // Turmas ativas hoje (ou futuras) por aluno: na kids o padrão da
-    // categoria é por turma (1x = 1 turma, 2x = 2 turmas).
+    // Dias de aula por semana (ativos ou futuros) por aluno: na kids o padrão
+    // da categoria é por dia (1x = R$ 200, 2x = R$ 400).
     const t = todayISO();
     const nByClient = new Map<string, number>();
     for (const m of raw)
@@ -196,20 +234,37 @@ export function ClassesPage({ program }: { program: ClassProgram }) {
 
   const teacherName = (id: string | null) => teachers.find((t) => t.id === id)?.name ?? null;
 
-  const visible = classes.filter(
-    (c) => showEnded || classIsActiveOn(c, today) || (c.valid_from ?? "") > today,
+  const groups = buildGroups(classes, today);
+  const visible = groups
+    .filter((g) => showEnded || g.current.length > 0)
+    .sort(
+      (a, b) =>
+        weekPos((a.current[0] ?? a.ref).weekday) - weekPos((b.current[0] ?? b.ref).weekday) ||
+        a.ref.start_time.localeCompare(b.ref.start_time) ||
+        a.ref.name.localeCompare(b.ref.name),
+    );
+  // Seções por combinação de dias ("Segunda e Quarta", "Terça e Quinta"...).
+  const sections: { label: string; list: ClassGroup[] }[] = [];
+  for (const g of visible) {
+    const label = g.current.length
+      ? daysLong(g.current.map((c) => c.weekday))
+      : "Turmas encerradas";
+    const s = sections.find((x) => x.label === label);
+    if (s) s.list.push(g);
+    else sections.push({ label, list: [g] });
+  }
+  sections.sort(
+    (a, b) =>
+      Number(a.label === "Turmas encerradas") - Number(b.label === "Turmas encerradas") ||
+      sections.indexOf(a) - sections.indexOf(b),
   );
-  const byWeekday = WEEK_ORDER.map((wd) => ({
-    wd,
-    list: visible.filter((c) => c.weekday === wd),
-  })).filter((g) => g.list.length > 0);
 
   const activeMembers = members.filter((m) => memberIsActiveOn(m, today));
-  // Uma mensalidade por aluno, mesmo que ele esteja em 2+ turmas.
+  // Uma mensalidade por aluno, mesmo que ele esteja em 2+ dias/turmas.
   const feeByClient = new Map(activeMembers.map((m) => [m.client_id, Number(m.monthly_fee ?? 0)]));
   const monthlyTotal = [...feeByClient.values()].reduce((s, v) => s + v, 0);
   const studentCount = feeByClient.size;
-  // Em quantas turmas (ativas ou futuras) cada aluno está.
+  // Quantos dias por semana (ativos ou futuros) cada aluno tem.
   const classCountByClient = new Map<string, number>();
   for (const m of members)
     if (memberIsActiveOn(m, today) || (m.valid_from ?? "") > today)
@@ -242,7 +297,7 @@ export function ClassesPage({ program }: { program: ClassProgram }) {
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Turmas ativas</div>
             <div className="text-2xl font-semibold">
-              {classes.filter((c) => classIsActiveOn(c, today)).length}
+              {groups.filter((g) => g.current.some((c) => classIsActiveOn(c, today))).length}
             </div>
           </CardContent>
         </Card>
@@ -271,29 +326,29 @@ export function ClassesPage({ program }: { program: ClassProgram }) {
 
       {loading ? (
         <div className="py-8 text-center text-muted-foreground">Carregando...</div>
-      ) : byWeekday.length === 0 ? (
+      ) : sections.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-muted-foreground">
             Nenhuma turma cadastrada. Clique em <strong>Nova turma</strong> para começar.
           </CardContent>
         </Card>
       ) : (
-        byWeekday.map((g) => (
-          <div key={g.wd} className="space-y-3">
-            <h2 className="text-lg font-semibold">{WEEKDAY_LONG[g.wd]}</h2>
+        sections.map((s) => (
+          <div key={s.label} className="space-y-3">
+            <h2 className="text-lg font-semibold">{s.label}</h2>
             <div className="grid gap-3 lg:grid-cols-2">
-              {g.list.map((c) => (
+              {s.list.map((g) => (
                 <ClassCard
-                  key={c.id}
+                  key={g.key}
                   program={program}
-                  cls={c}
-                  teacherName={teacherName(c.teacher_id)}
-                  members={members.filter((m) => m.class_id === c.id)}
+                  group={g}
+                  teacherName={teacherName(g.ref.teacher_id)}
+                  members={members.filter((m) => g.all.some((c) => c.id === m.class_id))}
                   classCountByClient={classCountByClient}
                   clients={clients}
                   today={today}
                   onEdit={() => {
-                    setEditing(c);
+                    setEditing(g);
                     setClassDialogOpen(true);
                   }}
                   onChanged={load}
@@ -308,8 +363,10 @@ export function ClassesPage({ program }: { program: ClassProgram }) {
         open={classDialogOpen}
         onOpenChange={setClassDialogOpen}
         editing={editing}
+        members={members}
         teachers={teachers}
         program={program}
+        today={today}
         onSaved={load}
       />
       <FeesDialog open={feesOpen} onOpenChange={setFeesOpen} kind={program} />
@@ -321,7 +378,7 @@ export function ClassesPage({ program }: { program: ClassProgram }) {
 
 function ClassCard({
   program,
-  cls,
+  group,
   teacherName,
   members,
   clients,
@@ -331,7 +388,7 @@ function ClassCard({
   onChanged,
 }: {
   program: ClassProgram;
-  cls: PickleballClass;
+  group: ClassGroup;
   teacherName: string | null;
   members: PickleballClassMember[];
   classCountByClient: Map<string, number>;
@@ -341,36 +398,102 @@ function ClassCard({
   onChanged: () => void;
 }) {
   const confirm = useConfirm();
+  const cls = group.ref;
+  const days = group.current;
   const [addClient, setAddClient] = useState("");
   const [addStart, setAddStart] = useState(today);
+  const [addDays, setAddDays] = useState<string[]>(days.map((d) => d.id));
   const [busy, setBusy] = useState(false);
   const [showPast, setShowPast] = useState(false);
+  const daysKey = days.map((d) => d.id).join(",") + "|" + members.length;
 
-  const active = members.filter((m) => memberIsActiveOn(m, today) || (m.valid_from ?? "") > today);
-  const past = members.filter((m) => !active.includes(m));
-  const ended = !classIsActiveOn(cls, today) && (cls.valid_from ?? "") <= today;
-  const full = cls.capacity != null && active.length >= cls.capacity;
-  const enrolledIds = new Set(active.map((m) => m.client_id));
+  useEffect(() => {
+    setAddDays(days.filter((d) => !fullDay(d)).map((d) => d.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [daysKey]);
+
+  const isMemberCurrent = (m: PickleballClassMember) =>
+    days.some((d) => d.id === m.class_id) &&
+    (memberIsActiveOn(m, today) || (m.valid_from ?? "") > today);
+  const active = members.filter(isMemberCurrent);
+  const ended = days.length === 0;
+
+  // Alunos (um por linha) com as matrículas de cada dia.
+  const students = new Map<
+    string,
+    { name: string; fee: number | null; byDay: Map<string, PickleballClassMember> }
+  >();
+  for (const m of active) {
+    const s = students.get(m.client_id) ?? {
+      name: m.full_name,
+      fee: m.monthly_fee,
+      byDay: new Map<string, PickleballClassMember>(),
+    };
+    s.byDay.set(m.class_id, m);
+    students.set(m.client_id, s);
+  }
+  const studentList = [...students.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name));
+  const countByDay = (classId: string) => active.filter((m) => m.class_id === classId).length;
+  const fullDay = (d: PickleballClass) => d.capacity != null && countByDay(d.id) >= d.capacity;
+  const allFull = days.length > 0 && days.every(fullDay);
+  const pastIds = new Set(studentList.map(([id]) => id));
+  const past = [
+    ...new Map(
+      members
+        .filter((m) => !pastIds.has(m.client_id) && !isMemberCurrent(m))
+        .map((m) => [m.client_id, m] as const),
+    ).values(),
+  ];
 
   const addMember = async () => {
     if (!addClient) return toast.error("Escolha o aluno.");
+    if (addDays.length === 0) return toast.error("Marque pelo menos um dia.");
     setBusy(true);
-    const { error } = await supabase.rpc("pickleball_class_add_member", {
-      _class_id: cls.id,
+    const { error } = await supabase.rpc("class_group_add_member", {
+      _class_ids: addDays,
       _client_id: addClient,
       _start: addStart || today,
     });
     setBusy(false);
     if (error) return toast.error(error.message);
-    toast.success("Aluno matriculado");
+    toast.success(`Aluno matriculado (${addDays.length}x por semana)`);
     setAddClient("");
     onChanged();
   };
 
-  const changeAmount = async (m: PickleballClassMember) => {
+  // Liga/desliga um dia do aluno.
+  const toggleDay = async (clientId: string, name: string, d: PickleballClass) => {
+    const m = students.get(clientId)?.byDay.get(d.id);
+    if (m) {
+      if (
+        !(await confirm(
+          `Tirar ${name} da ${WEEKDAY_LONG[d.weekday]?.toLowerCase()} da turma ${cls.name}? A partir de hoje esse dia deixa de ocupar a vaga.`,
+        ))
+      )
+        return;
+      setBusy(true);
+      const { error } = await supabase.rpc("pickleball_class_remove_member", {
+        _schedule_id: m.id,
+      });
+      setBusy(false);
+      if (error) return toast.error(error.message);
+    } else {
+      setBusy(true);
+      const { error } = await supabase.rpc("pickleball_class_add_member", {
+        _class_id: d.id,
+        _client_id: clientId,
+        _start: today,
+      });
+      setBusy(false);
+      if (error) return toast.error(error.message);
+    }
+    onChanged();
+  };
+
+  const changeAmount = async (clientId: string, name: string, fee: number | null) => {
     const raw = window.prompt(
-      `Mensalidade de ${m.full_name} (R$) — fica no cadastro do cliente e vale para todas as turmas dele. Deixe vazio para usar o padrão da categoria:`,
-      m.monthly_fee != null ? String(m.monthly_fee) : "",
+      `Mensalidade de ${name} (R$) — fica no cadastro do cliente e vale para todas as turmas dele. Deixe vazio para usar o padrão da categoria:`,
+      fee != null ? String(fee) : "",
     );
     if (raw == null) return;
     const v = raw.trim() === "" ? null : Number(raw.replace(",", "."));
@@ -378,7 +501,7 @@ function ClassCard({
     const { error } = await supabase
       .from("clients")
       .update({ custom_amount: v })
-      .eq("id", m.client_id);
+      .eq("id", clientId);
     if (error) return toast.error(error.message);
     toast.success("Mensalidade atualizada");
     onChanged();
@@ -387,8 +510,8 @@ function ClassCard({
   const endClass = async () => {
     if (
       !(await confirm(
-        `Encerrar a turma ${cls.name} agora?\n\n` +
-          `• ${active.length} aluno(s) saem da turma e o horário fica livre para locação a partir de hoje.\n` +
+        `Encerrar a turma ${cls.name} (${daysLong(days.map((d) => d.weekday))}) agora?\n\n` +
+          `• ${studentList.length} aluno(s) saem da turma e os horários ficam livres para locação a partir de hoje.\n` +
           `• Quem não estiver em outra turma deixa de ter mensalidade gerada a partir do próximo mês, ` +
           `inclusive quem é da categoria ${PROGRAMS[program].categoryLabel}.\n` +
           `• Quem for continuar, coloque em outra turma — a mensalidade continua a do cadastro.\n\n` +
@@ -397,25 +520,44 @@ function ClassCard({
     )
       return;
     setBusy(true);
-    const { error } = await supabase.rpc("pickleball_class_end", { _class_id: cls.id });
+    for (const d of days) {
+      const { error } = await supabase.rpc("pickleball_class_end", { _class_id: d.id });
+      if (error) {
+        setBusy(false);
+        toast.error(error.message);
+        return onChanged();
+      }
+    }
     setBusy(false);
-    if (error) return toast.error(error.message);
     toast.success("Turma encerrada");
     onChanged();
   };
 
-  const removeMember = async (m: PickleballClassMember) => {
+  const removeMember = async (clientId: string, name: string) => {
     if (
       !(await confirm(
-        `Tirar ${m.full_name} da turma ${cls.name}? A partir de hoje o horário dele(a) deixa de ocupar a quadra. Se não estiver em outra turma, a mensalidade deixa de ser gerada. O histórico fica guardado.`,
+        `Tirar ${name} da turma ${cls.name} (todos os dias)? A partir de hoje o horário dele(a) deixa de ocupar a quadra. Se não estiver em outra turma, a mensalidade deixa de ser gerada. O histórico fica guardado.`,
       ))
     )
       return;
-    const { error } = await supabase.rpc("pickleball_class_remove_member", { _schedule_id: m.id });
-    if (error) return toast.error(error.message);
+    setBusy(true);
+    for (const m of students.get(clientId)?.byDay.values() ?? []) {
+      const { error } = await supabase.rpc("pickleball_class_remove_member", {
+        _schedule_id: m.id,
+      });
+      if (error) {
+        setBusy(false);
+        toast.error(error.message);
+        return onChanged();
+      }
+    }
+    setBusy(false);
     toast.success("Aluno retirado da turma");
     onChanged();
   };
+
+  const capLabel = (d: PickleballClass) =>
+    `${WEEKDAY_SHORT[d.weekday]} ${countByDay(d.id)}${d.capacity != null ? `/${d.capacity}` : ""}`;
 
   return (
     <Card className={cn(ended && "opacity-60")}>
@@ -424,16 +566,27 @@ function ClassCard({
           <div>
             <CardTitle className="text-base">{cls.name}</CardTitle>
             <div className="text-sm text-muted-foreground">
-              {weekdayShort[cls.weekday]} {cls.start_time.slice(0, 5)}–{cls.end_time.slice(0, 5)} ·{" "}
-              {courtShort(cls.court)} · {teacherName ? `Prof. ${teacherName}` : "sem professor"}
+              {(days.length ? days : group.all).map((d) => weekdayShort[d.weekday]).join(" e ")}{" "}
+              {cls.start_time.slice(0, 5)}–{cls.end_time.slice(0, 5)} · {courtShort(cls.court)} ·{" "}
+              {teacherName ? `Prof. ${teacherName}` : "sem professor"}
             </div>
             <div className="flex gap-2 mt-2 flex-wrap">
-              <Badge variant={full ? "destructive" : "secondary"}>
+              <Badge variant={allFull ? "destructive" : "secondary"}>
                 <Users className="h-3 w-3 mr-1" />
-                {active.length}
-                {cls.capacity != null ? ` / ${cls.capacity}` : ""} alunos
+                {studentList.length} aluno{studentList.length === 1 ? "" : "s"}
               </Badge>
-              {ended && (
+              {days.length > 1 &&
+                days.map((d) => (
+                  <Badge key={d.id} variant={fullDay(d) ? "destructive" : "outline"}>
+                    {capLabel(d)}
+                  </Badge>
+                ))}
+              {days.length === 1 && cls.capacity != null && (
+                <Badge variant={fullDay(cls) ? "destructive" : "outline"}>
+                  limite {cls.capacity}
+                </Badge>
+              )}
+              {ended && cls.valid_until && (
                 <Badge variant="outline">
                   Encerrada em {fmtDate(cls.valid_until + "T12:00:00")}
                 </Badge>
@@ -459,95 +612,148 @@ function ClassCard({
                 Encerrar turma
               </Button>
             )}
-            <Button variant="ghost" size="icon" onClick={onEdit} aria-label="Editar turma">
-              <Pencil className="h-4 w-4" />
-            </Button>
+            {!ended && (
+              <Button variant="ghost" size="icon" onClick={onEdit} aria-label="Editar turma">
+                <Pencil className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
-        {active.length === 0 && !ended && (
+        {studentList.length === 0 && !ended && (
           <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
             Turma sem aluno não ocupa a quadra: o horário aparece livre para locação no mapa.
           </p>
         )}
       </CardHeader>
       <CardContent className="space-y-3">
-        {active.length > 0 && (
+        {studentList.length > 0 && (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Aluno</TableHead>
+                {days.length > 1 && <TableHead>Dias</TableHead>}
                 <TableHead className="text-right">Mensalidade</TableHead>
                 <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {active.map((m) => (
-                <TableRow key={m.id}>
-                  <TableCell>
-                    <div>{m.full_name}</div>
-                    {m.valid_from && m.valid_from > today && (
-                      <div className="text-xs text-muted-foreground">
-                        entra em {fmtDate(m.valid_from + "T12:00:00")}
-                      </div>
-                    )}
-                    {m.valid_until && (
-                      <div className="text-xs text-muted-foreground">
-                        até {fmtDate(m.valid_until + "T12:00:00")}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <button
-                      type="button"
-                      className={cn(
-                        "underline-offset-2 hover:underline",
-                        m.monthly_fee == null && "text-amber-700 dark:text-amber-400",
+              {studentList.map(([clientId, s]) => {
+                const any = [...s.byDay.values()][0]!;
+                return (
+                  <TableRow key={clientId}>
+                    <TableCell>
+                      <div>{s.name}</div>
+                      {any.valid_from && any.valid_from > today && (
+                        <div className="text-xs text-muted-foreground">
+                          entra em {fmtDate(any.valid_from + "T12:00:00")}
+                        </div>
                       )}
-                      onClick={() => changeAmount(m)}
-                      title="Alterar a mensalidade no cadastro do aluno"
-                    >
-                      {m.monthly_fee != null ? fmtBRL(m.monthly_fee) : "sem valor"}
-                    </button>
-                    {(classCountByClient.get(m.client_id) ?? 0) > 1 && (
-                      <div className="text-xs text-muted-foreground">
-                        {classCountByClient.get(m.client_id)} turmas · 1 mensalidade
-                      </div>
+                      {any.valid_until && (
+                        <div className="text-xs text-muted-foreground">
+                          até {fmtDate(any.valid_until + "T12:00:00")}
+                        </div>
+                      )}
+                    </TableCell>
+                    {days.length > 1 && (
+                      <TableCell>
+                        <div className="flex gap-1">
+                          {days.map((d) => {
+                            const on = s.byDay.has(d.id);
+                            return (
+                              <button
+                                key={d.id}
+                                type="button"
+                                disabled={busy}
+                                onClick={() => toggleDay(clientId, s.name, d)}
+                                title={on ? "Tirar desse dia" : "Colocar nesse dia"}
+                                className={cn(
+                                  "rounded border px-1.5 py-0.5 text-xs font-medium disabled:opacity-50",
+                                  on
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-background text-muted-foreground hover:bg-muted",
+                                )}
+                              >
+                                {WEEKDAY_SHORT[d.weekday]}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </TableCell>
                     )}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeMember(m)}
-                      aria-label={`Tirar ${m.full_name} da turma`}
-                    >
-                      <UserMinus className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    <TableCell className="text-right">
+                      <button
+                        type="button"
+                        className={cn(
+                          "underline-offset-2 hover:underline",
+                          s.fee == null && "text-amber-700 dark:text-amber-400",
+                        )}
+                        onClick={() => changeAmount(clientId, s.name, s.fee)}
+                        title="Alterar a mensalidade no cadastro do aluno"
+                      >
+                        {s.fee != null ? fmtBRL(s.fee) : "sem valor"}
+                      </button>
+                      {(classCountByClient.get(clientId) ?? 0) > 1 && (
+                        <div className="text-xs text-muted-foreground">
+                          {classCountByClient.get(clientId)}x por semana · 1 mensalidade
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        disabled={busy}
+                        onClick={() => removeMember(clientId, s.name)}
+                        aria-label={`Tirar ${s.name} da turma`}
+                      >
+                        <UserMinus className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}
 
-        {!ended && !full && (
+        {!ended && !allFull && (
           <div className="rounded-md border p-3 space-y-2">
             <div className="text-sm font-medium">Matricular aluno</div>
             <ClientCombobox
-              clients={clients.filter((c) => !enrolledIds.has(c.id))}
+              clients={clients.filter((c) => !students.has(c.id))}
               value={addClient}
               onChange={setAddClient}
               placeholder="Pesquisar cliente"
             />
+            {days.length > 1 && (
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs text-muted-foreground">Dias:</span>
+                {days.map((d) => (
+                  <label key={d.id} className="flex items-center gap-1.5 text-sm">
+                    <Checkbox
+                      checked={addDays.includes(d.id)}
+                      disabled={fullDay(d)}
+                      onCheckedChange={(v) =>
+                        setAddDays((cur) =>
+                          v === true ? [...cur, d.id] : cur.filter((x) => x !== d.id),
+                        )
+                      }
+                    />
+                    {WEEKDAY_LONG[d.weekday]}
+                    {fullDay(d) && <span className="text-xs text-destructive">(cheia)</span>}
+                  </label>
+                ))}
+              </div>
+            )}
             <div className="space-y-1 max-w-[12rem]">
               <Label className="text-xs">A partir de</Label>
               <Input type="date" value={addStart} onChange={(e) => setAddStart(e.target.value)} />
             </div>
             <p className="text-xs text-muted-foreground">
-              A mensalidade vem do cadastro do aluno — uma só por mês, mesmo em 2 ou mais turmas
-              (ex.: R$ 400 para 2x por semana). Clique no valor do aluno para alterar.
+              A mensalidade vem do cadastro do aluno — uma só por mês, mesmo em 2 ou mais dias (ex.:
+              R$ 400 para 2x por semana). Clique no valor do aluno para alterar.
               {program === "kids" &&
-                " Sem valor no cadastro, usa o padrão da categoria × nº de turmas."}
+                " Sem valor no cadastro, usa o padrão da categoria × nº de dias por semana."}
             </p>
             <Button size="sm" onClick={addMember} disabled={busy}>
               {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -587,21 +793,27 @@ function ClassDialog({
   open,
   onOpenChange,
   editing,
+  members,
   teachers,
   program,
+  today,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  editing: PickleballClass | null;
+  editing: ClassGroup | null;
+  members: PickleballClassMember[];
   teachers: Teacher[];
   program: ClassProgram;
+  today: string;
   onSaved: () => void;
 }) {
+  const confirm = useConfirm();
   const courts = PROGRAMS[program].courts;
+  const ref = editing?.ref ?? null;
   const [name, setName] = useState("");
   const [court, setCourt] = useState(String(courts[0]));
-  const [weekday, setWeekday] = useState("1");
+  const [weekdays, setWeekdays] = useState<number[]>([1]);
   const [start, setStart] = useState("19:00");
   const [end, setEnd] = useState("20:00");
   const [teacherId, setTeacherId] = useState("none");
@@ -613,30 +825,57 @@ function ClassDialog({
 
   useEffect(() => {
     if (!open) return;
-    setName(editing?.name ?? "");
-    setCourt(String(editing?.court ?? courts[0]));
-    setWeekday(String(editing?.weekday ?? 1));
-    setStart(editing?.start_time.slice(0, 5) ?? "19:00");
-    setEnd(editing?.end_time.slice(0, 5) ?? "20:00");
-    setTeacherId(editing?.teacher_id ?? "none");
-    setCapacity(editing?.capacity != null ? String(editing.capacity) : "");
-    setValidFrom(editing?.valid_from ?? "");
-    setValidUntil(editing?.valid_until ?? "");
-    setNotes(editing?.notes ?? "");
+    setName(ref?.name ?? "");
+    setCourt(String(ref?.court ?? courts[0]));
+    setWeekdays(editing ? editing.current.map((c) => c.weekday) : [1]);
+    setStart(ref?.start_time.slice(0, 5) ?? "19:00");
+    setEnd(ref?.end_time.slice(0, 5) ?? "20:00");
+    setTeacherId(ref?.teacher_id ?? "none");
+    setCapacity(ref?.capacity != null ? String(ref.capacity) : "");
+    setValidFrom(ref?.valid_from ?? "");
+    setValidUntil(ref?.valid_until ?? "");
+    setNotes(ref?.notes ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editing]);
 
+  const toggleWeekday = (wd: number, on: boolean) =>
+    setWeekdays((cur) => (on ? [...new Set([...cur, wd])] : cur.filter((x) => x !== wd)));
+
   const save = async () => {
-    if (!name.trim()) return toast.error("Dê um nome à turma (ex.: Iniciante Terça 19h).");
+    if (!name.trim()) return toast.error("Dê um nome à turma (ex.: Kids 16h).");
+    if (weekdays.length === 0) return toast.error("Marque pelo menos um dia da semana.");
     if (end <= start) return toast.error("O horário final precisa ser depois do inicial.");
     const cap = capacity.trim() ? Number(capacity) : null;
     if (cap != null && (!Number.isInteger(cap) || cap <= 0))
       return toast.error("Limite de alunos inválido.");
+
+    // Dias desmarcados encerram aquele dia (alunos saem dele).
+    const removed = (editing?.current ?? []).filter((c) => !weekdays.includes(c.weekday));
+    if (removed.length) {
+      const affected = new Set(
+        members
+          .filter(
+            (m) =>
+              removed.some((c) => c.id === m.class_id) &&
+              (memberIsActiveOn(m, today) || (m.valid_from ?? "") > today),
+          )
+          .map((m) => m.client_id),
+      ).size;
+      if (
+        !(await confirm(
+          `Tirar ${daysLong(removed.map((c) => c.weekday))} da turma? Esse(s) dia(s) são encerrados a partir de hoje` +
+            (affected ? ` e ${affected} aluno(s) saem dele(s).` : "."),
+        ))
+      )
+        return;
+    }
+
     setSaving(true);
-    const { error } = await supabase.rpc("pickleball_class_save", {
-      _id: editing?.id ?? (null as unknown as string),
+    const { error } = await supabase.rpc("class_group_save", {
+      _group_id: (editing?.key ?? null) as unknown as string,
       _name: name,
       _court: Number(court),
-      _weekday: Number(weekday),
+      _weekdays: weekdays,
       _start: start,
       _end: end,
       _teacher_id: teacherId === "none" ? (null as unknown as string) : teacherId,
@@ -660,8 +899,8 @@ function ClassDialog({
           <DialogTitle>{editing ? "Editar turma" : "Nova turma"}</DialogTitle>
           <DialogDescription>
             {editing
-              ? "Mudar dia, horário, quadra ou professor muda também o horário de todos os alunos matriculados."
-              : "Cada turma é um horário semanal. Depois de criar, matricule os alunos no cartão da turma."}
+              ? "Mudar dias, horário, quadra ou professor muda também o horário dos alunos matriculados."
+              : "Marque os dias da semana da turma. Depois de criar, matricule os alunos no cartão da turma escolhendo os dias de cada um."}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
@@ -670,8 +909,22 @@ function ClassDialog({
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="ex.: Iniciante Terça 19h"
+              placeholder={program === "kids" ? "ex.: Kids 16h" : "ex.: Iniciante 19h"}
             />
+          </div>
+          <div className="space-y-1">
+            <Label>Dias da semana</Label>
+            <div className="flex flex-wrap gap-x-4 gap-y-2 rounded-md border p-2">
+              {WEEK_ORDER.map((wd) => (
+                <label key={wd} className="flex items-center gap-1.5 text-sm">
+                  <Checkbox
+                    checked={weekdays.includes(wd)}
+                    onCheckedChange={(v) => toggleWeekday(wd, v === true)}
+                  />
+                  {WEEKDAY_SHORT[wd]}
+                </label>
+              ))}
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
@@ -690,19 +943,13 @@ function ClassDialog({
               </Select>
             </div>
             <div className="space-y-1">
-              <Label>Dia da semana</Label>
-              <Select value={weekday} onValueChange={setWeekday}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {WEEK_ORDER.map((wd) => (
-                    <SelectItem key={wd} value={String(wd)}>
-                      {WEEKDAY_LONG[wd]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Limite de alunos (por dia)</Label>
+              <Input
+                inputMode="numeric"
+                value={capacity}
+                onChange={(e) => setCapacity(e.target.value)}
+                placeholder="sem limite"
+              />
             </div>
             <div className="space-y-1">
               <Label>Início</Label>
@@ -717,7 +964,7 @@ function ClassDialog({
               <Label>Fim</Label>
               <Input type="time" step={1800} value={end} onChange={(e) => setEnd(e.target.value)} />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1 col-span-2">
               <Label>Professor</Label>
               <Select value={teacherId} onValueChange={setTeacherId}>
                 <SelectTrigger>
@@ -726,7 +973,7 @@ function ClassDialog({
                 <SelectContent>
                   <SelectItem value="none">Sem professor</SelectItem>
                   {teachers
-                    .filter((t) => t.active || t.id === editing?.teacher_id)
+                    .filter((t) => t.active || t.id === ref?.teacher_id)
                     .map((t) => (
                       <SelectItem key={t.id} value={t.id}>
                         {t.name}
@@ -734,15 +981,6 @@ function ClassDialog({
                     ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Limite de alunos</Label>
-              <Input
-                inputMode="numeric"
-                value={capacity}
-                onChange={(e) => setCapacity(e.target.value)}
-                placeholder="sem limite"
-              />
             </div>
             <div className="space-y-1">
               <Label>Começa em</Label>
