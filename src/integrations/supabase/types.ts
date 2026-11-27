@@ -881,6 +881,7 @@ export type Database = {
           id: string
           is_demo: boolean
           is_gympass: boolean
+          kids_avulso: boolean
           linked_teacher_id: string | null
           notes: string | null
           phone: string | null
@@ -909,6 +910,7 @@ export type Database = {
           id?: string
           is_demo?: boolean
           is_gympass?: boolean
+          kids_avulso?: boolean
           linked_teacher_id?: string | null
           notes?: string | null
           phone?: string | null
@@ -937,6 +939,7 @@ export type Database = {
           id?: string
           is_demo?: boolean
           is_gympass?: boolean
+          kids_avulso?: boolean
           linked_teacher_id?: string | null
           notes?: string | null
           phone?: string | null
@@ -2277,6 +2280,54 @@ export type Database = {
         }
         Relationships: []
       }
+      class_drop_ins: {
+        Row: {
+          account_entry_id: string | null
+          amount: number
+          class_date: string
+          class_id: string
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+        }
+        Insert: {
+          account_entry_id?: string | null
+          amount: number
+          class_date: string
+          class_id: string
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+        }
+        Update: {
+          account_entry_id?: string | null
+          amount?: number
+          class_date?: string
+          class_id?: string
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "class_drop_ins_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "pickleball_classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "class_drop_ins_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pickleball_class_makeups: {
         Row: {
           class_date: string
@@ -2374,6 +2425,7 @@ export type Database = {
           id: string
           name: string
           notes: string | null
+          program: string
           start_time: string
           teacher_id: string | null
           updated_at: string
@@ -2390,6 +2442,7 @@ export type Database = {
           id?: string
           name: string
           notes?: string | null
+          program?: string
           start_time: string
           teacher_id?: string | null
           updated_at?: string
@@ -2406,6 +2459,7 @@ export type Database = {
           id?: string
           name?: string
           notes?: string | null
+          program?: string
           start_time?: string
           teacher_id?: string | null
           updated_at?: string
@@ -2907,6 +2961,51 @@ export type Database = {
             columns: ["teacher_id"]
             isOneToOne: false
             referencedRelation: "teachers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tennis_school_billing: {
+        Row: {
+          account_entry_id: string | null
+          amount: number
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          reference_month: string
+        }
+        Insert: {
+          account_entry_id?: string | null
+          amount: number
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          reference_month: string
+        }
+        Update: {
+          account_entry_id?: string | null
+          amount?: number
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          reference_month?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tennis_school_billing_account_entry_id_fkey"
+            columns: ["account_entry_id"]
+            isOneToOne: false
+            referencedRelation: "account_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tennis_school_billing_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
         ]
@@ -3676,8 +3775,23 @@ export type Database = {
         Returns: string | null
       }
       pickleball_class_remove_makeup: { Args: { _id: string }; Returns: undefined }
+      class_add_drop_in: {
+        Args: {
+          _amount?: number
+          _class_id: string
+          _client_id: string
+          _date: string
+          _mark_avulso?: boolean
+        }
+        Returns: string
+      }
+      class_remove_drop_in: { Args: { _id: string }; Returns: undefined }
+      kids_set_avulso: {
+        Args: { _avulso: boolean; _client_id: string }
+        Returns: undefined
+      }
       pickleball_makeup_balance: {
-        Args: { _client_ids: string[] }
+        Args: { _client_ids: string[]; _program?: string }
         Returns: {
           available: number
           client_id: string
@@ -3754,6 +3868,7 @@ export type Database = {
           _id: string
           _name: string
           _notes: string
+          _program?: string
           _start: string
           _teacher_id: string
           _valid_from: string

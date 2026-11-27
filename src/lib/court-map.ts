@@ -281,7 +281,7 @@ export interface FixedSchedule {
   // ocupa a quadra, mas não gera cobrança por aula.
   class_id?: string | null;
   class_monthly_amount?: number | null;
-  pickleball_classes?: { id: string; name: string } | null;
+  pickleball_classes?: { id: string; name: string; program?: string | null } | null;
 }
 
 // Retorna a exceção que cobre a hora informada (ou null se não houver).

@@ -2,6 +2,7 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   Users,
+  Baby,
   Tags,
   Receipt,
   BarChart3,
@@ -73,6 +74,12 @@ const NAV: NavItem[] = [
     to: "/turmas",
     label: "Turmas pickleball",
     icon: Users,
+    rolesAllowed: ["admin", "diretoria", "recepcionista"],
+  },
+  {
+    to: "/escolinha-kids",
+    label: "Escolinha Kids",
+    icon: Baby,
     rolesAllowed: ["admin", "diretoria", "recepcionista"],
   },
   { to: "/financas", label: "Finanças", icon: Wallet, pageKey: "financas" },
