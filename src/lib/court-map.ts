@@ -111,9 +111,18 @@ export const SOURCE_COLOR: Record<string, string> = {
 export const FIXED_COLOR =
   "bg-green-800/20 border-green-900/30 text-green-950 dark:text-green-100";
 
-// Turma fixa de pickleball (mensalidade única, sem cobrança por aula).
+// Turmas fixas (mensalidade única, sem cobrança por aula). Cada programa tem
+// a sua cor pra identificar no mapa de qual turma é o horário:
+// Pickleball → violeta; Escolinha Kids de tênis → laranja. Cores escolhidas
+// pra não colidir com avulsa/fixo (verde), professor (azul), pré-reserva e
+// cancelado (âmbar), próprio/pago online (amarelo), ranking e manutenção.
 export const CLASS_COLOR =
   "bg-violet-300/40 border-violet-500/50 text-violet-950 dark:bg-violet-500/25 dark:text-violet-50";
+export const CLASS_KIDS_COLOR =
+  "bg-orange-300/45 border-orange-500/60 text-orange-950 dark:bg-orange-500/25 dark:text-orange-50";
+
+export const classColorClass = (program: string | null | undefined): string =>
+  program === "kids" ? CLASS_KIDS_COLOR : CLASS_COLOR;
 
 export interface BookingParticipant {
   client_id: string;
