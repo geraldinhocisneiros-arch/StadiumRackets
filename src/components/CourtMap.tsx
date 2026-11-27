@@ -23,7 +23,7 @@ import {
   timeToHours,
   hoursToLabel,
   SOURCE_COLOR,
-  FIXED_COLOR,
+  fixedCellColorClass,
   bookingCellColorClass,
   findFixedExceptionForHour,
   isMovedFromFixedBooking,
@@ -551,7 +551,8 @@ export function CourtMap({
                 return "bg-muted border border-border/60 text-muted-foreground";
               }
               if (isMovedFromFixedBooking(b)) {
-                return `${FIXED_COLOR} border`;
+                const cc = b.clients?.client_categories;
+                return `${fixedCellColorClass(cc?.name, cc?.color)} border`;
               }
               // Professor com teachers.map_color_as_avulsa tem suas reservas
               // coloridas como avulsa (verde) no mapa.
@@ -582,7 +583,8 @@ export function CourtMap({
               if (hideOccupantDetails && !isOwn) {
                 return "bg-muted border border-border/60 text-muted-foreground";
               }
-              return `${FIXED_COLOR} border`;
+              const cc = f.clients?.client_categories;
+              return `${fixedCellColorClass(cc?.name, cc?.color)} border`;
             })(),
         )}
       >

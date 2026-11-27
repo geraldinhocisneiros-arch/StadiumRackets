@@ -132,7 +132,13 @@ export interface Booking {
   category_name?: string | null;
   category_color?: string | null;
   cancelled_at: string | null;
-  clients?: { id: string; full_name: string } | null;
+  clients?: {
+    id: string;
+    full_name: string;
+    // Categoria do cadastro do cliente (ex.: "Escolinha Tenis") — usada pra
+    // colorir locações "movidas do fixo" igual ao fixo de origem.
+    client_categories?: { name: string; color: string | null } | null;
+  } | null;
   // map_color_as_avulsa: professor cujas reservas aparecem com a cor
   // verde de avulsa no mapa em vez do azul padrão de professor.
   teachers?: { id: string; name: string; map_color_as_avulsa?: boolean | null } | null;
@@ -177,6 +183,10 @@ export const isRankingMasculinoName = (name: string | null | undefined): boolean
   normalizeCategory(name) === "ranking masculino";
 export const isRankingFemininoName = (name: string | null | undefined): boolean =>
   normalizeCategory(name) === "ranking feminino";
+export const isEscolinhaTenisName = (name: string | null | undefined): boolean =>
+  normalizeCategory(name) === "escolinha tenis";
+export const isEscolinhaPickleballName = (name: string | null | undefined): boolean =>
+  normalizeCategory(name) === "escolinha pickleball";
 export const isManutencaoName = (name: string | null | undefined): boolean =>
   normalizeCategory(name) === "manutencao";
 
@@ -194,6 +204,30 @@ export const RANKING_FEM_COLOR =
   "bg-pink-400/25 border-pink-500/50 text-pink-950 dark:text-pink-100";
 export const MANUTENCAO_COLOR =
   "bg-red-500/20 border-red-600/60 text-red-950 dark:bg-red-500/15 dark:text-red-100";
+
+// Turmas (fixos de clientes da categoria Escolinha): cada modalidade com a sua
+// cor, pra identificar no mapa de qual turma é o horário. Cores escolhidas
+// pra não colidir com avulsa/fixo (verde), professor (azul), pré-reserva e
+// cancelado (âmbar), próprio/pago online (amarelo), ranking e manutenção.
+// Se a categoria tiver cor definida na tela Categorias, essa prevalece.
+export const ESCOLINHA_TENIS_COLOR =
+  "bg-violet-500/25 border-violet-600/50 text-violet-950 dark:bg-violet-500/20 dark:text-violet-100";
+export const ESCOLINHA_PICKLEBALL_COLOR =
+  "bg-orange-500/25 border-orange-600/50 text-orange-950 dark:bg-orange-500/20 dark:text-orange-100";
+
+// Cor de um horário fixo (ou locação movida do fixo) pela categoria do
+// cliente: só muda quando a categoria tem cor configurada ou é Escolinha —
+// os demais fixos continuam no verde-escuro padrão.
+export const fixedCellColorClass = (
+  categoryName: string | null | undefined,
+  categoryColor?: string | null,
+): string => {
+  const custom = categoryColorPreset(categoryColor);
+  if (custom) return custom.cellClass;
+  if (isEscolinhaTenisName(categoryName)) return ESCOLINHA_TENIS_COLOR;
+  if (isEscolinhaPickleballName(categoryName)) return ESCOLINHA_PICKLEBALL_COLOR;
+  return FIXED_COLOR;
+};
 
 // Paleta de cores que o usuário pode escolher livremente por categoria
 // (tela Categorias). A chave é o que fica salvo em `client_categories.color`.
@@ -233,6 +267,8 @@ export const bookingCellColorClass = (
   if (isManutencaoName(categoryName)) return MANUTENCAO_COLOR;
   if (isRankingMasculinoName(categoryName)) return RANKING_MASC_COLOR;
   if (isRankingFemininoName(categoryName)) return RANKING_FEM_COLOR;
+  if (isEscolinhaTenisName(categoryName)) return ESCOLINHA_TENIS_COLOR;
+  if (isEscolinhaPickleballName(categoryName)) return ESCOLINHA_PICKLEBALL_COLOR;
   return fallback;
 };
 
@@ -254,7 +290,11 @@ export interface FixedSchedule {
   end_time: string;
   court: number | null;
   notes: string | null;
-  clients?: { id: string; full_name: string } | null;
+  clients?: {
+    id: string;
+    full_name: string;
+    client_categories?: { name: string; color: string | null } | null;
+  } | null;
   teachers?: { id: string; name: string } | null;
   // preenchido no cliente: exceções aplicáveis à data corrente
   exceptions?: FixedException[];
