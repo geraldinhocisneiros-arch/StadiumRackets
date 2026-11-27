@@ -25,6 +25,12 @@ import {
   SOURCE_COLOR,
   fixedCellColorClass,
   bookingCellColorClass,
+  FIXED_COLOR,
+  RANKING_MASC_COLOR,
+  RANKING_FEM_COLOR,
+  MANUTENCAO_COLOR,
+  isEscolinhaTenisName,
+  isEscolinhaPickleballName,
   findFixedExceptionForHour,
   isMovedFromFixedBooking,
   isImportedPlaceholderNote,
@@ -1186,6 +1192,58 @@ export function CourtMap({
           )}
         </div>
       </div>
+      {!hideOccupantDetails && (
+        <CourtMapLegend bookings={bookings} fixedSchedules={fixedSchedules} />
+      )}
+    </div>
+  );
+}
+
+// Legenda das cores do mapa. As duas Escolinhas usam a cor de fato aplicada
+// nas células (respeita a cor escolhida na tela Categorias, se houver).
+function CourtMapLegend({
+  bookings,
+  fixedSchedules,
+}: {
+  bookings: Booking[];
+  fixedSchedules: FixedSchedule[];
+}) {
+  const escolinhaColor = (match: (n: string | null | undefined) => boolean): string => {
+    for (const f of fixedSchedules) {
+      const cc = f.clients?.client_categories;
+      if (cc && match(cc.name)) return fixedCellColorClass(cc.name, cc.color);
+    }
+    for (const b of bookings) {
+      const cc = b.clients?.client_categories;
+      if (cc && match(cc.name)) return fixedCellColorClass(cc.name, cc.color);
+    }
+    return fixedCellColorClass(
+      match === isEscolinhaTenisName ? "Escolinha Tenis" : "Escolinha Pickleball",
+    );
+  };
+  const items: { label: string; cls: string }[] = [
+    { label: "Avulsa", cls: SOURCE_COLOR.avulsa },
+    { label: "Fixo", cls: FIXED_COLOR },
+    { label: "Professor", cls: SOURCE_COLOR.professor },
+    { label: "Escolinha Tênis", cls: escolinhaColor(isEscolinhaTenisName) },
+    { label: "Escolinha Pickleball", cls: escolinhaColor(isEscolinhaPickleballName) },
+    { label: "Ranking masc.", cls: RANKING_MASC_COLOR },
+    { label: "Ranking fem.", cls: RANKING_FEM_COLOR },
+    { label: "Manutenção", cls: MANUTENCAO_COLOR },
+    { label: "Pago online", cls: "bg-yellow-400 border-yellow-600" },
+    { label: "Pré-reserva", cls: "bg-amber-400/60 border-dashed border-amber-700" },
+  ];
+  return (
+    <div
+      className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 px-1 text-[11px] text-muted-foreground"
+      aria-label="Legenda de cores do mapa"
+    >
+      {items.map((it) => (
+        <span key={it.label} className="inline-flex items-center gap-1.5 whitespace-nowrap">
+          <span className={cn("inline-block h-3 w-4 rounded-sm border", it.cls)} aria-hidden="true" />
+          {it.label}
+        </span>
+      ))}
     </div>
   );
 }
