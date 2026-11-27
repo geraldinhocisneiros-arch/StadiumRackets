@@ -25,6 +25,11 @@ import {
   SOURCE_COLOR,
   FIXED_COLOR,
   CLASS_COLOR,
+  CLASS_KIDS_COLOR,
+  classColorClass,
+  RANKING_MASC_COLOR,
+  RANKING_FEM_COLOR,
+  MANUTENCAO_COLOR,
   bookingCellColorClass,
   findFixedExceptionForHour,
   isMovedFromFixedBooking,
@@ -583,7 +588,7 @@ export function CourtMap({
               if (hideOccupantDetails && !isOwn) {
                 return "bg-muted border border-border/60 text-muted-foreground";
               }
-              if (f.class_id) return `${CLASS_COLOR} border`;
+              if (f.class_id) return `${classColorClass(f.pickleball_classes?.program)} border`;
               return `${FIXED_COLOR} border`;
             })(),
         )}
@@ -1209,6 +1214,41 @@ export function CourtMap({
           )}
         </div>
       </div>
+      {!hideOccupantDetails && <CourtMapLegend />}
+    </div>
+  );
+}
+
+// Legenda das cores do mapa (staff/TV/professor). No portal do cliente as
+// células aparecem só como "Ocupado", então a legenda não aparece lá.
+const LEGEND_ITEMS: { label: string; cls: string }[] = [
+  { label: "Avulsa", cls: SOURCE_COLOR.avulsa },
+  { label: "Fixo", cls: FIXED_COLOR },
+  { label: "Professor", cls: SOURCE_COLOR.professor },
+  { label: "Turma Kids (tênis)", cls: CLASS_KIDS_COLOR },
+  { label: "Turma Pickleball", cls: CLASS_COLOR },
+  { label: "Ranking masc.", cls: RANKING_MASC_COLOR },
+  { label: "Ranking fem.", cls: RANKING_FEM_COLOR },
+  { label: "Manutenção", cls: MANUTENCAO_COLOR },
+  { label: "Pago online", cls: "bg-yellow-400 border-yellow-600" },
+  { label: "Pré-reserva", cls: "bg-amber-400/60 border-dashed border-amber-700" },
+];
+
+function CourtMapLegend() {
+  return (
+    <div
+      className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 px-1 text-[11px] text-muted-foreground"
+      aria-label="Legenda de cores do mapa"
+    >
+      {LEGEND_ITEMS.map((it) => (
+        <span key={it.label} className="inline-flex items-center gap-1.5 whitespace-nowrap">
+          <span
+            className={cn("inline-block h-3 w-4 rounded-sm border", it.cls)}
+            aria-hidden="true"
+          />
+          {it.label}
+        </span>
+      ))}
     </div>
   );
 }
