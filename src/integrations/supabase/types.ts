@@ -2422,6 +2422,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           end_time: string
+          group_id: string | null
           id: string
           name: string
           notes: string | null
@@ -2439,6 +2440,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           end_time: string
+          group_id?: string | null
           id?: string
           name: string
           notes?: string | null
@@ -2456,6 +2458,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           end_time?: string
+          group_id?: string | null
           id?: string
           name?: string
           notes?: string | null
@@ -3782,6 +3785,27 @@ export type Database = {
           _client_id: string
           _date: string
           _mark_avulso?: boolean
+        }
+        Returns: string
+      }
+      class_group_add_member: {
+        Args: { _class_ids: string[]; _client_id: string; _start?: string }
+        Returns: number
+      }
+      class_group_save: {
+        Args: {
+          _capacity: number
+          _court: number
+          _end: string
+          _group_id: string
+          _name: string
+          _notes: string
+          _program?: string
+          _start: string
+          _teacher_id: string
+          _valid_from: string
+          _valid_until: string
+          _weekdays: number[]
         }
         Returns: string
       }

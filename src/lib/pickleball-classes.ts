@@ -13,6 +13,8 @@ export type ClassProgram = "pickleball" | "kids";
 export interface PickleballClass {
   id: string;
   program: ClassProgram;
+  /** Dias da mesma turma (ex.: segunda e quarta) compartilham o grupo. */
+  group_id: string | null;
   name: string;
   court: number;
   weekday: number;
