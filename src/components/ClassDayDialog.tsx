@@ -6,7 +6,10 @@
 //   * Faltou   → aula perdida, sem direito a reposição;
 //   * Cancelou → não conta presença e dá direito a 1 reposição.
 // E se lança quem veio REPOR uma aula nesta turma (consome 1 crédito).
-// Ver supabase/migrations/20261126130000_pickleball_chamada_reposicao.sql.
+// Escolinha Kids: também lança cliente AVULSO (R$ 70 por aula, débito na
+// conta, sem direito a reposição). Reposição só vale no mesmo programa.
+// Ver supabase/migrations/20261126130000_pickleball_chamada_reposicao.sql
+// e 20261127120000_escolinha_kids.sql.
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -20,6 +23,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useConfirm } from "@/hooks/useConfirm";
+import { fetchAll } from "@/lib/fetchAll";
+import { fmtBRL } from "@/lib/format";
+import { KIDS_DROP_IN_PRICE } from "@/lib/pickleball-classes";
 import { ClientCombobox, type ClientOption } from "@/components/ClientCombobox";
 import { supabase } from "@/integrations/supabase/client";
 import { courtShort, fmtDateBR, type FixedSchedule } from "@/lib/court-map";
@@ -74,6 +83,10 @@ interface Makeup {
   full_name: string;
 }
 
+interface DropIn extends Makeup {
+  amount: number;
+}
+
 export function ClassDayDialog({
   data,
   date,
@@ -88,6 +101,9 @@ export function ClassDayDialog({
 }) {
   const f = data?.fixed;
   const classId = f?.class_id ?? null;
+  const program = f?.pickleball_classes?.program === "kids" ? "kids" : "pickleball";
+  const isKids = program === "kids";
+  const confirm = useConfirm();
   const students = data
     ? [data.fixed, ...data.siblings]
         .filter((s) => s.class_id === classId)
@@ -102,12 +118,19 @@ export function ClassDayDialog({
   const [makeupClient, setMakeupClient] = useState("");
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [dropIns, setDropIns] = useState<DropIn[]>([]);
+  const [dropInOptions, setDropInOptions] = useState<(ClientOption & { kids_avulso: boolean })[]>(
+    [],
+  );
+  const [dropInClient, setDropInClient] = useState("");
+  const [dropInAmount, setDropInAmount] = useState(String(KIDS_DROP_IN_PRICE));
+  const [markAvulso, setMarkAvulso] = useState(true);
 
   const load = async () => {
     if (!classId || students.length === 0) return;
     setLoading(true);
     const scheduleIds = students.map((s) => s.id);
-    const [attRes, mkRes, allRes] = await Promise.all([
+    const [attRes, mkRes, allRes, diRes] = await Promise.all([
       supabase
         .from("client_schedule_attendance")
         .select("client_schedule_id, status")
@@ -118,9 +141,34 @@ export function ClassDayDialog({
         .select("id, client_id, clients!client_id(full_name)")
         .eq("class_id", classId)
         .eq("class_date", date),
-      // Todo aluno que já esteve em turma pode ter crédito de reposição.
-      supabase.from("client_schedules").select("client_id").not("class_id", "is", null),
+      // Todo aluno que já esteve em turma do programa pode ter crédito de reposição.
+      supabase
+        .from("client_schedules")
+        .select("client_id, pickleball_classes!inner(program)")
+        .not("class_id", "is", null)
+        .eq("pickleball_classes.program", program),
+      supabase
+        .from("class_drop_ins")
+        .select("id, client_id, amount, clients!client_id(full_name)")
+        .eq("class_id", classId)
+        .eq("class_date", date),
     ]);
+    if (diRes.error) toast.error(diRes.error.message);
+    setDropIns(
+      (
+        (diRes.data ?? []) as unknown as {
+          id: string;
+          client_id: string;
+          amount: number;
+          clients: { full_name: string } | null;
+        }[]
+      ).map((d) => ({
+        id: d.id,
+        client_id: d.client_id,
+        amount: Number(d.amount),
+        full_name: d.clients?.full_name ?? "—",
+      })),
+    );
     if (attRes.error) toast.error(attRes.error.message);
     if (mkRes.error) toast.error(mkRes.error.message);
     const st: Record<string, RollStatus> = {};
@@ -144,6 +192,7 @@ export function ClassDayDialog({
     if (ids.length) {
       const { data: bal, error } = await supabase.rpc("pickleball_makeup_balance", {
         _client_ids: ids,
+        _program: program,
       });
       if (error) toast.error(error.message);
       const rows = (bal ?? []) as { client_id: string; available: number }[];
@@ -164,6 +213,8 @@ export function ClassDayDialog({
   useEffect(() => {
     if (data) {
       setMakeupClient("");
+      setDropInClient("");
+      setDropInAmount(String(KIDS_DROP_IN_PRICE));
       void load();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -234,9 +285,91 @@ export function ClassDayDialog({
     await load();
   };
 
+  // Clientes para avulso (só na kids): carregados uma vez ao abrir.
+  useEffect(() => {
+    if (!data || !isKids) return;
+    fetchAll<ClientOption & { kids_avulso: boolean; active: boolean }>(
+      "clients",
+      "id, full_name, kids_avulso, active",
+      { build: (q) => q.eq("active", true).order("full_name") },
+    )
+      .then((rows) => setDropInOptions(rows))
+      .catch((e) => toast.error(String(e?.message ?? e)));
+  }, [data, isKids]);
+
+  // Marcar como avulso: padrão ligado para quem não é aluno de turma kids.
+  useEffect(() => {
+    if (!dropInClient) return;
+    const opt = dropInOptions.find((c) => c.id === dropInClient);
+    if (opt?.kids_avulso) return setMarkAvulso(false);
+    void supabase
+      .from("client_schedules")
+      .select("id, valid_until, pickleball_classes!inner(program)")
+      .eq("client_id", dropInClient)
+      .eq("pickleball_classes.program", "kids")
+      .or(`valid_until.is.null,valid_until.gte.${date}`)
+      .then(({ data: rows }) => setMarkAvulso((rows ?? []).length === 0));
+  }, [dropInClient, dropInOptions, date]);
+
+  const addDropIn = async () => {
+    if (!classId || !dropInClient) return;
+    const amount = Math.round((Number(dropInAmount.replace(",", ".")) || 0) * 100) / 100;
+    if (amount < 0) return toast.error("Valor inválido.");
+    const opt = dropInOptions.find((c) => c.id === dropInClient);
+    // Já tem mensalidade kids gerada no mês? Avulso por cima é cobrança dupla.
+    const { data: bill } = await supabase
+      .from("tennis_school_billing")
+      .select("id")
+      .eq("client_id", dropInClient)
+      .eq("reference_month", `${date.slice(0, 7)}-01`)
+      .maybeSingle();
+    if (
+      bill &&
+      !(await confirm(
+        `${opt?.full_name ?? "Esse cliente"} já tem a mensalidade da Escolinha Kids deste mês lançada. Cobrar mais ${fmtBRL(amount)} como aula avulsa mesmo assim (aula extra)?`,
+      ))
+    )
+      return;
+    setBusy("dropin");
+    const { error } = await supabase.rpc("class_add_drop_in", {
+      _class_id: classId,
+      _client_id: dropInClient,
+      _date: date,
+      _amount: amount,
+      _mark_avulso: markAvulso && !opt?.kids_avulso,
+    });
+    setBusy(null);
+    if (error) return toast.error(error.message);
+    toast.success(
+      `Aula avulsa lançada: ${fmtBRL(amount)} na conta de ${opt?.full_name ?? "cliente"}`,
+    );
+    setDropInClient("");
+    await load();
+    onChanged?.();
+  };
+
+  const removeDropIn = async (d: DropIn) => {
+    if (
+      !(await confirm(
+        `Remover a aula avulsa de ${d.full_name}? O débito de ${fmtBRL(d.amount)} sai da conta dele(a).`,
+      ))
+    )
+      return;
+    setBusy(d.id);
+    const { error } = await supabase.rpc("class_remove_drop_in", { _id: d.id });
+    setBusy(null);
+    if (error) return toast.error(error.message);
+    await load();
+    onChanged?.();
+  };
+
   const count = (v: RollButton) => students.filter((s) => buttonOf(status[s.id]) === v).length;
   const memberIds = new Set(students.map((s) => s.client_id));
   const makeupIds = new Set(makeups.map((m) => m.client_id));
+  const dropInIds = new Set(dropIns.map((d) => d.client_id));
+  const dropInChoices = dropInOptions.filter(
+    (c) => !memberIds.has(c.id) && !makeupIds.has(c.id) && !dropInIds.has(c.id),
+  );
 
   return (
     <Dialog open={!!data} onOpenChange={onOpenChange}>
@@ -358,13 +491,15 @@ export function ClassDayDialog({
                     ))}
                   </ul>
                 )}
-                {makeupOptions.filter((c) => !memberIds.has(c.id) && !makeupIds.has(c.id)).length >
-                0 ? (
+                {makeupOptions.filter(
+                  (c) => !memberIds.has(c.id) && !makeupIds.has(c.id) && !dropInIds.has(c.id),
+                ).length > 0 ? (
                   <div className="flex gap-2">
                     <div className="flex-1">
                       <ClientCombobox
                         clients={makeupOptions.filter(
-                          (c) => !memberIds.has(c.id) && !makeupIds.has(c.id),
+                          (c) =>
+                            !memberIds.has(c.id) && !makeupIds.has(c.id) && !dropInIds.has(c.id),
                         )}
                         value={makeupClient}
                         onChange={setMakeupClient}
@@ -382,6 +517,72 @@ export function ClassDayDialog({
                 )}
               </div>
 
+              {isKids && (
+                <div className="rounded-md border p-3 space-y-2">
+                  <div className="text-sm font-medium">Aluno avulso nesta aula</div>
+                  {dropIns.length > 0 && (
+                    <ul className="space-y-1">
+                      {dropIns.map((d) => (
+                        <li key={d.id} className="flex items-center justify-between text-sm">
+                          <span>
+                            {d.full_name}{" "}
+                            <span className="text-xs text-sky-700 dark:text-sky-400">
+                              · avulso {fmtBRL(d.amount)}
+                            </span>
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            disabled={busy != null}
+                            onClick={() => removeDropIn(d)}
+                            aria-label={`Remover aula avulsa de ${d.full_name}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <div className="flex-1 min-w-[12rem]">
+                      <ClientCombobox
+                        clients={dropInChoices}
+                        value={dropInClient}
+                        onChange={setDropInClient}
+                        placeholder="Pesquisar cliente"
+                      />
+                    </div>
+                    <Input
+                      inputMode="decimal"
+                      className="h-9 w-24 text-right"
+                      value={dropInAmount}
+                      onChange={(e) => setDropInAmount(e.target.value)}
+                      aria-label="Valor da aula avulsa"
+                    />
+                    <Button size="sm" onClick={addDropIn} disabled={!dropInClient || busy != null}>
+                      {busy === "dropin" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      Lançar avulso
+                    </Button>
+                  </div>
+                  {dropInClient &&
+                    !dropInOptions.find((c) => c.id === dropInClient)?.kids_avulso && (
+                      <label className="flex items-center gap-2 text-xs">
+                        <Checkbox
+                          checked={markAvulso}
+                          onCheckedChange={(v) => setMarkAvulso(v === true)}
+                        />
+                        Marcar como cliente avulso (não gera mensalidade da Escolinha Kids)
+                      </label>
+                    )}
+                  <p className="text-xs text-muted-foreground">
+                    Para quem não paga mensalidade: lança {fmtBRL(KIDS_DROP_IN_PRICE)} (editável)
+                    como débito na conta do cliente. Avulso não tem direito a reposição e ocupa vaga
+                    da turma no dia.
+                  </p>
+                </div>
+              )}
+
               <p className="text-xs text-muted-foreground">
                 Veio = presença. Faltou = aula perdida, sem reposição. Cancelou = não conta
                 presença; até 12h antes da aula o aluno ganha 1 reposição (sem validade, em qualquer
@@ -396,7 +597,9 @@ export function ClassDayDialog({
                 Fechar
               </Button>
               <Button asChild variant="outline">
-                <Link to="/turmas">Abrir Turmas</Link>
+                <Link to={isKids ? "/escolinha-kids" : "/turmas"}>
+                  {isKids ? "Abrir Escolinha Kids" : "Abrir Turmas"}
+                </Link>
               </Button>
             </DialogFooter>
           </>

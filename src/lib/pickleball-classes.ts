@@ -7,8 +7,12 @@
 // em quantas turmas esteja) e a presença NÃO gera cobrança.
 // Ver supabase/migrations/20261117000000_turmas_pickleball.sql.
 
+/** Programa da turma: pickleball (PB1–PB3) ou Escolinha Kids de tênis (quadra 1). */
+export type ClassProgram = "pickleball" | "kids";
+
 export interface PickleballClass {
   id: string;
+  program: ClassProgram;
   name: string;
   court: number;
   weekday: number;
@@ -34,6 +38,9 @@ export interface PickleballClassMember {
    * turmas dele e é cobrada uma vez por mês. */
   monthly_fee: number | null;
 }
+
+/** Valor padrão da aula avulsa da Escolinha Kids (quem não paga mensalidade). */
+export const KIDS_DROP_IN_PRICE = 70;
 
 /** Horário fixo que é matrícula de turma (não cobra por aula). */
 export const isClassSchedule = (s: { class_id?: string | null } | null | undefined): boolean =>
